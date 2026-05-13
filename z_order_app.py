@@ -1,363 +1,642 @@
 """
-╔══════════════════════════════════════════════════════════════════════╗
-║          Z-ORDER  —  SaaS-Ready Print Workflow Platform             ║
-║          نظام إدارة مطبعة متكامل وقابل للتوسع التجاري              ║
-╠══════════════════════════════════════════════════════════════════════╣
-║  Developer : Abdulrahman Fallah                                     ║
-║  Version   : 2.0.0                                                  ║
-║  Stack     : Python · Streamlit · SQLite3                           ║
-╠══════════════════════════════════════════════════════════════════════╣
-║  التشغيل لأول مرة:                                                  ║
-║    pip install streamlit pillow                                     ║
-║    streamlit run z_order_app.py                                     ║
-║                                                                      ║
-║  حساب المدير الافتراضي:                                             ║
-║    Email    : admin@zorder.iq                                       ║
-║    Password : Admin@2025                                            ║
-╚══════════════════════════════════════════════════════════════════════╝
+╔══════════════════════════════════════════════════════════════════════════╗
+║         Z-ORDER  ·  Print Workflow Platform  ·  v3.0                   ║
+║         نظام إدارة المطبعة — النسخة المحكمة                           ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║  Developer   : Abdulrahman Fallah                                       ║
+║  Version     : 3.0.0  (Admin-Controlled Access)                         ║
+║  Stack       : Python 3.x · Streamlit · SQLite3                         ║
+╠══════════════════════════════════════════════════════════════════════════╣
+║  التشغيل لأول مرة:                                                      ║
+║    1.  pip install streamlit pillow                                      ║
+║    2.  streamlit run z_order_app.py                                      ║
+║                                                                          ║
+║  حساب المدير الافتراضي:                                                 ║
+║    Email    : admin@zorder.iq                                           ║
+║    Password : Admin@2025                                                ║
+║                                                                          ║
+║  ملاحظة: فقط المدير يستطيع إضافة موظفين جدد.                          ║
+║          لا يوجد تسجيل ذاتي — كل الحسابات تُنشأ من لوحة المدير.       ║
+╚══════════════════════════════════════════════════════════════════════════╝
 """
 
+# ─────────────────────────────────────────────────────────────────────────────
+#  IMPORTS
+# ─────────────────────────────────────────────────────────────────────────────
 import streamlit as st
 import sqlite3
 import hashlib
 import datetime
-import os
 import base64
 import pandas as pd
 from pathlib import Path
 
-# ══════════════════════════════════════════════
-#  APP CONFIG
-# ══════════════════════════════════════════════
-
+# ─────────────────────────────────────────────────────────────────────────────
+#  PAGE CONFIG  (must be FIRST Streamlit call)
+# ─────────────────────────────────────────────────────────────────────────────
 st.set_page_config(
-    page_title="Z-Order | منصة إدارة المطبعة",
+    page_title="Z-Order | نظام إدارة المطبعة",
     page_icon="🖨️",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
+# ─────────────────────────────────────────────────────────────────────────────
+#  CONSTANTS
+# ─────────────────────────────────────────────────────────────────────────────
 DEVELOPER  = "Abdulrahman Fallah"
 APP_NAME   = "Z-Order"
-APP_VER    = "2.0.0"
+APP_VER    = "3.0.0"
 DB_PATH    = "z_order.db"
 UPLOAD_DIR = Path("z_order_uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 
+# Role registry
 ROLES = {
-    "admin":      {"label": "المدير العام",    "icon": "🛡️"},
-    "sales":      {"label": "المبيعات",         "icon": "💼"},
-    "design":     {"label": "التصميم",          "icon": "🎨"},
-    "purchase":   {"label": "المشتريات",        "icon": "📦"},
-    "production": {"label": "الإنتاج",          "icon": "🖨️"},
-    "agent":      {"label": "مندوب مبيعات",    "icon": "🗺️"},
+    "admin":      {"label": "المدير العام",      "icon": "🛡️", "color": "#e8a020"},
+    "sales":      {"label": "المبيعات",           "icon": "💼", "color": "#3b82f6"},
+    "design":     {"label": "التصميم",            "icon": "🎨", "color": "#a855f7"},
+    "production": {"label": "الإنتاج",            "icon": "🖨️", "color": "#ff6b35"},
+    "agent":      {"label": "مندوب المبيعات",     "icon": "🗺️", "color": "#22c55e"},
 }
 
-# ══════════════════════════════════════════════
-#  GLOBAL CSS — Dark Industrial / Mobile-First
-# ══════════════════════════════════════════════
+# Pages per role — strict isolation
+ROLE_PAGES = {
+    "admin": [
+        "📊 لوحة المدير",
+        "👥 إدارة الموظفين",
+        "📋 جميع الأوردرات",
+        "💰 التقارير المالية",
+        "🗺️ تقارير المندوبين",
+        "🚨 بلاغات الأعطال",
+    ],
+    "sales": [
+        "📊 لوحتي",
+        "➕ أوردر جديد",
+        "📋 أوردراتي",
+        "💰 تقرير المبيعات",
+        "🚨 بلاغ خلل",
+    ],
+    "design": [
+        "📊 لوحتي",
+        "🎨 مهام التصميم",
+        "📋 عرض الأوردرات",
+        "🚨 بلاغ خلل",
+    ],
+    "production": [
+        "📊 لوحتي",
+        "🖨️ الإنتاج والطباعة",
+        "📋 عرض الأوردرات",
+        "🚨 بلاغ خلل",
+    ],
+    "agent": [
+        "📊 لوحتي",
+        "🗺️ تسجيل زيارة",
+        "📋 زياراتي",
+        "🚨 بلاغ خلل",
+    ],
+}
 
-CSS = """
+# ─────────────────────────────────────────────────────────────────────────────
+#  GLOBAL CSS  — Dark Industrial + Mobile-First Responsive
+# ─────────────────────────────────────────────────────────────────────────────
+GLOBAL_CSS = """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap');
+/* ── Fonts ─────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap');
 
+/* ── Design tokens ─────────────────────────── */
 :root {
-  --bg0:#07080a; --bg1:#0e1015; --bg2:#141720; --bg3:#1b1f2c;
-  --bg4:#222739; --border:#252a38; --border2:#2e3447;
-  --acc:#e8a020; --acc2:#ff6b35; --acc3:#ffd166;
-  --blue:#3b82f6; --green:#22c55e; --red:#ef4444;
-  --purple:#a855f7; --cyan:#06b6d4;
-  --t1:#eef0f4; --t2:#8b95a8; --t3:#454e63;
-  --r:10px; --r2:16px;
-  --shadow:0 4px 24px rgba(0,0,0,0.4);
+  --bg0:  #07080b;
+  --bg1:  #0d0f14;
+  --bg2:  #131620;
+  --bg3:  #191d2a;
+  --bg4:  #1f2436;
+  --bg5:  #252b40;
+
+  --bdr:  #252a3a;
+  --bdr2: #2d3450;
+
+  --acc:  #e8a020;
+  --acc2: #ff6b35;
+  --acc3: #ffd166;
+
+  --blue:   #3b82f6;
+  --green:  #22c55e;
+  --red:    #ef4444;
+  --purple: #a855f7;
+  --cyan:   #06b6d4;
+  --orange: #fb923c;
+
+  --t1: #edf0f5;
+  --t2: #8b94a8;
+  --t3: #444c65;
+
+  --r:  10px;
+  --r2: 14px;
+  --r3: 20px;
+  --shadow-sm: 0 2px 8px rgba(0,0,0,.35);
+  --shadow:    0 4px 20px rgba(0,0,0,.5);
+  --shadow-lg: 0 8px 40px rgba(0,0,0,.65);
 }
 
-*, *::before, *::after { box-sizing: border-box; }
+/* ── Reset / base ───────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body, [class*="css"] {
   font-family: 'IBM Plex Sans Arabic', sans-serif !important;
   background: var(--bg0) !important;
   color: var(--t1) !important;
-  direction: rtl;
+  direction: rtl !important;
 }
 
-::-webkit-scrollbar { width:5px; height:5px; }
-::-webkit-scrollbar-track { background:var(--bg1); }
-::-webkit-scrollbar-thumb { background:var(--bg4); border-radius:3px; }
-::-webkit-scrollbar-thumb:hover { background:var(--acc); }
+/* ── Scrollbars ─────────────────────────────── */
+::-webkit-scrollbar           { width: 5px; height: 5px; }
+::-webkit-scrollbar-track     { background: var(--bg1); }
+::-webkit-scrollbar-thumb     { background: var(--bg5); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--acc); }
 
+/* ── App shell ──────────────────────────────── */
+.stApp { background: var(--bg0) !important; }
+
+.main .block-container {
+  padding: 1.75rem 1.75rem 6rem !important;
+  max-width: 1380px !important;
+}
+
+/* ── Sidebar ────────────────────────────────── */
 section[data-testid="stSidebar"] {
   background: var(--bg1) !important;
-  border-left: 1px solid var(--border) !important;
+  border-left: 1px solid var(--bdr) !important;
 }
 section[data-testid="stSidebar"] * { color: var(--t1) !important; }
-
-.stApp { background: var(--bg0) !important; }
-.main .block-container {
-  padding: 1.5rem 1.5rem 5rem !important;
-  max-width: 1400px !important;
+section[data-testid="stSidebar"] .stRadio label {
+  font-size: .88rem !important;
+  padding: .3rem 0 !important;
 }
 
-.stTextInput>div>div>input,
-.stTextArea>div>div>textarea,
-.stSelectbox>div>div,
-.stNumberInput>div>div>input {
-  background: var(--bg2) !important;
-  border: 1px solid var(--border2) !important;
+/* ── Inputs ─────────────────────────────────── */
+.stTextInput > div > div > input,
+.stTextArea  > div > div > textarea,
+.stSelectbox > div > div,
+.stNumberInput > div > div > input,
+[data-baseweb="input"] input,
+[data-baseweb="textarea"] textarea {
+  background:   var(--bg3) !important;
+  border:       1px solid var(--bdr2) !important;
   border-radius: var(--r) !important;
-  color: var(--t1) !important;
-  font-family: 'IBM Plex Sans Arabic', sans-serif !important;
+  color:        var(--t1) !important;
+  font-family:  'IBM Plex Sans Arabic', sans-serif !important;
+  font-size:    .92rem !important;
+  transition:   border-color .2s, box-shadow .2s;
+}
+.stTextInput > div > div > input:focus,
+.stTextArea  > div > div > textarea:focus {
+  border-color: var(--acc) !important;
+  box-shadow:   0 0 0 3px rgba(232,160,32,.12) !important;
+  outline: none !important;
 }
 
-.stButton>button {
-  background: linear-gradient(135deg,var(--acc),var(--acc2)) !important;
-  color:#07080a !important;
-  font-weight:700 !important;
-  border:none !important;
-  border-radius:var(--r) !important;
-  padding:.55rem 1.3rem !important;
-  font-family:'IBM Plex Sans Arabic',sans-serif !important;
-  transition:all .2s !important;
-  width:100%;
+/* ── Buttons ────────────────────────────────── */
+.stButton > button {
+  background:    linear-gradient(135deg, var(--acc) 0%, var(--acc2) 100%) !important;
+  color:         #07080b !important;
+  font-weight:   700 !important;
+  font-size:     .9rem !important;
+  border:        none !important;
+  border-radius: var(--r) !important;
+  padding:       .6rem 1.4rem !important;
+  width:         100% !important;
+  font-family:   'IBM Plex Sans Arabic', sans-serif !important;
+  letter-spacing: .01em;
+  transition:    transform .18s, box-shadow .18s !important;
+  cursor:        pointer;
 }
-.stButton>button:hover {
-  transform:translateY(-2px) !important;
-  box-shadow:0 6px 24px rgba(232,160,32,.4) !important;
+.stButton > button:hover {
+  transform:  translateY(-2px) !important;
+  box-shadow: 0 8px 28px rgba(232,160,32,.38) !important;
 }
+.stButton > button:active { transform: translateY(0) !important; }
 
+/* ── Tabs ───────────────────────────────────── */
 .stTabs [data-baseweb="tab-list"] {
-  background:var(--bg2) !important;
-  border-radius:var(--r) !important;
-  gap:4px !important; padding:4px !important;
-  border:1px solid var(--border) !important;
+  background:    var(--bg3) !important;
+  border-radius: var(--r) !important;
+  gap:           3px !important;
+  padding:       4px !important;
+  border:        1px solid var(--bdr) !important;
+  flex-wrap:     wrap !important;        /* mobile: tabs wrap */
 }
 .stTabs [data-baseweb="tab"] {
-  background:transparent !important;
-  color:var(--t2) !important;
-  border-radius:8px !important;
-  font-weight:500 !important;
-  border:none !important;
+  background:    transparent !important;
+  color:         var(--t2) !important;
+  border-radius: 7px !important;
+  font-weight:   500 !important;
+  font-size:     .84rem !important;
+  border:        none !important;
+  white-space:   nowrap;
 }
 .stTabs [aria-selected="true"] {
-  background:var(--bg4) !important;
-  color:var(--acc) !important;
-  border-bottom:2px solid var(--acc) !important;
+  background:    var(--bg5) !important;
+  color:         var(--acc) !important;
+  border-bottom: 2px solid var(--acc) !important;
 }
 
+/* ── Metrics ────────────────────────────────── */
 [data-testid="stMetric"] {
-  background:var(--bg2) !important;
-  border:1px solid var(--border2) !important;
-  border-radius:var(--r2) !important;
-  padding:1rem 1.2rem !important;
+  background:    var(--bg2) !important;
+  border:        1px solid var(--bdr2) !important;
+  border-radius: var(--r2) !important;
+  padding:       1rem 1.15rem !important;
 }
-[data-testid="stMetricLabel"] { color:var(--t2) !important; font-size:.78rem !important; }
+[data-testid="stMetricLabel"] {
+  color:     var(--t2) !important;
+  font-size: .76rem !important;
+}
 [data-testid="stMetricValue"] {
-  color:var(--acc) !important;
-  font-family:'JetBrains Mono',monospace !important;
-  font-size:1.5rem !important;
+  color:       var(--acc) !important;
+  font-family: 'JetBrains Mono', monospace !important;
+  font-size:   1.4rem !important;
 }
 
+/* ── Expanders ──────────────────────────────── */
 .streamlit-expanderHeader {
-  background:var(--bg2) !important;
-  border:1px solid var(--border2) !important;
-  border-radius:var(--r) !important;
-  color:var(--t1) !important;
+  background:    var(--bg2) !important;
+  border:        1px solid var(--bdr2) !important;
+  border-radius: var(--r) !important;
+  color:         var(--t1) !important;
+  font-size:     .9rem !important;
 }
 .streamlit-expanderContent {
-  background:var(--bg1) !important;
-  border:1px solid var(--border2) !important;
-  border-top:none !important;
-  border-radius:0 0 var(--r) var(--r) !important;
+  background:    var(--bg1) !important;
+  border:        1px solid var(--bdr2) !important;
+  border-top:    none !important;
+  border-radius: 0 0 var(--r) var(--r) !important;
 }
 
-.stDataFrame { border-radius:var(--r) !important; border:1px solid var(--border) !important; }
-.stAlert { background:var(--bg2) !important; border-radius:var(--r) !important; }
+/* ── Dataframe ──────────────────────────────── */
+.stDataFrame, iframe[title="st.dataframe"] {
+  border-radius: var(--r) !important;
+  border:        1px solid var(--bdr) !important;
+}
+
+/* ── Alerts ─────────────────────────────────── */
+.stAlert {
+  background:    var(--bg2) !important;
+  border-radius: var(--r) !important;
+}
+
+/* ── File uploader ──────────────────────────── */
 [data-testid="stFileUploader"] {
-  background:var(--bg2) !important;
-  border:1px dashed var(--border2) !important;
-  border-radius:var(--r) !important;
+  background:    var(--bg3) !important;
+  border:        1.5px dashed var(--bdr2) !important;
+  border-radius: var(--r) !important;
 }
-hr { border-color:var(--border) !important; margin:1.25rem 0 !important; }
 
-/* ── CUSTOM COMPONENTS ── */
+/* ── Divider ────────────────────────────────── */
+hr { border-color: var(--bdr) !important; margin: 1.2rem 0 !important; }
 
+/* ══════════════════════════════════════════════
+   CUSTOM COMPONENTS
+═══════════════════════════════════════════════ */
+
+/* ── Z-Logo ─────────────────────────────────── */
 .z-logo {
-  font-family:'JetBrains Mono',monospace;
-  font-size:1.9rem; font-weight:700;
-  color:var(--acc); letter-spacing:-.06em; line-height:1;
+  font-family:    'JetBrains Mono', monospace;
+  font-size:      2rem;
+  font-weight:    700;
+  color:          var(--acc);
+  letter-spacing: -.07em;
+  line-height:    1;
+  user-select:    none;
 }
-.z-logo .dash { color:var(--t3); }
+.z-logo .sep { color: var(--t3); }
 
-.page-header {
-  display:flex; align-items:center; gap:.75rem; margin-bottom:1.5rem;
+/* ── Page header ────────────────────────────── */
+.ph {
+  display:       flex;
+  align-items:   center;
+  gap:           .8rem;
+  margin-bottom: 1.5rem;
 }
-.page-icon {
-  font-size:1.8rem;
-  background:var(--bg2); border:1px solid var(--border2);
-  border-radius:var(--r); width:52px; height:52px;
-  display:flex; align-items:center; justify-content:center; flex-shrink:0;
+.ph-icon {
+  font-size:      1.7rem;
+  background:     var(--bg2);
+  border:         1px solid var(--bdr2);
+  border-radius:  var(--r);
+  width: 52px; height: 52px;
+  display:        flex;
+  align-items:    center;
+  justify-content:center;
+  flex-shrink:    0;
 }
-.page-title-text h2 { font-size:1.35rem; font-weight:700; margin:0; color:var(--t1); }
-.page-title-text p  { font-size:.82rem; color:var(--t3); margin:0; }
+.ph h2 { font-size: 1.3rem; font-weight: 700; color: var(--t1); margin: 0; }
+.ph p  { font-size: .8rem;  color: var(--t3); margin: 0; }
 
+/* ── Card ───────────────────────────────────── */
 .card {
-  background:var(--bg2); border:1px solid var(--border2);
-  border-radius:var(--r2); padding:1.2rem 1.4rem;
-  margin-bottom:.85rem; transition:border-color .2s,transform .15s;
+  background:    var(--bg2);
+  border:        1px solid var(--bdr2);
+  border-radius: var(--r2);
+  padding:       1.15rem 1.4rem;
+  margin-bottom: .8rem;
+  transition:    border-color .2s, transform .15s;
 }
-.card:hover { border-color:var(--acc); transform:translateY(-1px); }
+.card:hover { border-color: var(--acc); transform: translateY(-1px); }
+.card b { font-size: .95rem; }
 
+/* ── Info card ──────────────────────────────── */
+.info-card {
+  background:    linear-gradient(135deg, rgba(232,160,32,.07), rgba(255,107,53,.04));
+  border:        1px solid rgba(232,160,32,.2);
+  border-radius: var(--r2);
+  padding:       1rem 1.3rem;
+  margin-bottom: 1rem;
+  font-size:     .85rem;
+  color:         var(--t2);
+  line-height:   1.9;
+  border-right:  3px solid var(--acc);
+}
+
+/* ── Badge ──────────────────────────────────── */
 .badge {
-  display:inline-flex; align-items:center; gap:4px;
-  padding:.18rem .6rem; border-radius:999px;
-  font-size:.7rem; font-weight:700;
-  letter-spacing:.04em; text-transform:uppercase;
+  display:        inline-flex;
+  align-items:    center;
+  gap:            4px;
+  padding:        .2rem .65rem;
+  border-radius:  999px;
+  font-size:      .68rem;
+  font-weight:    700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
 }
-.b-new      { background:rgba(59,130,246,.15); color:#60a5fa; border:1px solid rgba(59,130,246,.25); }
-.b-design   { background:rgba(168,85,247,.15);  color:#c084fc; border:1px solid rgba(168,85,247,.25); }
-.b-purchase { background:rgba(232,160,32,.15);  color:#fbbf24; border:1px solid rgba(232,160,32,.25); }
-.b-ready    { background:rgba(34,197,94,.15);   color:#4ade80; border:1px solid rgba(34,197,94,.25); }
-.b-printing { background:rgba(255,107,53,.15);  color:#fb923c; border:1px solid rgba(255,107,53,.25); }
+.b-new      { background:rgba(59,130,246,.14);  color:#60a5fa; border:1px solid rgba(59,130,246,.25); }
+.b-design   { background:rgba(168,85,247,.14);  color:#c084fc; border:1px solid rgba(168,85,247,.25); }
+.b-purchase { background:rgba(232,160,32,.14);  color:#fbbf24; border:1px solid rgba(232,160,32,.25); }
+.b-ready    { background:rgba(34,197,94,.14);   color:#4ade80; border:1px solid rgba(34,197,94,.25); }
+.b-print    { background:rgba(255,107,53,.14);  color:#fb923c; border:1px solid rgba(255,107,53,.25); }
 .b-done     { background:rgba(34,197,94,.1);    color:#16a34a; border:1px solid rgba(34,197,94,.2); }
-.b-agent-buy { background:rgba(34,197,94,.12);  color:#22c55e; border:1px solid rgba(34,197,94,.2); }
-.b-agent-pot { background:rgba(59,130,246,.12); color:#3b82f6; border:1px solid rgba(59,130,246,.2); }
-.b-agent-no  { background:rgba(239,68,68,.12);  color:#ef4444; border:1px solid rgba(239,68,68,.2); }
+.b-abuy     { background:rgba(34,197,94,.12);   color:#22c55e; border:1px solid rgba(34,197,94,.2); }
+.b-apot     { background:rgba(59,130,246,.12);  color:#3b82f6; border:1px solid rgba(59,130,246,.2); }
+.b-ano      { background:rgba(239,68,68,.12);   color:#ef4444; border:1px solid rgba(239,68,68,.2); }
+.b-sev-lo   { background:rgba(34,197,94,.12);   color:#22c55e; border:1px solid rgba(34,197,94,.2); }
+.b-sev-md   { background:rgba(251,191,36,.12);  color:#fbbf24; border:1px solid rgba(251,191,36,.2); }
+.b-sev-hi   { background:rgba(239,68,68,.12);   color:#ef4444; border:1px solid rgba(239,68,68,.2); }
 
-.guide-box {
-  background:var(--bg3); border-right:3px solid var(--acc);
-  border-radius:0 var(--r) var(--r) 0; padding:1rem 1.25rem;
-  margin-bottom:1.25rem; font-size:.86rem; color:var(--t2); line-height:1.8;
+/* ── User chip (sidebar) ────────────────────── */
+.uchip {
+  display:       flex;
+  align-items:   center;
+  gap:           .65rem;
+  background:    var(--bg3);
+  border:        1px solid var(--bdr2);
+  border-radius: var(--r2);
+  padding:       .6rem .9rem;
+  margin-bottom: 1rem;
+}
+.uavatar {
+  width:           34px;
+  height:          34px;
+  background:      linear-gradient(135deg, var(--acc), var(--acc2));
+  border-radius:   50%;
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  font-size:       .82rem;
+  font-weight:     700;
+  color:           #07080b;
+  flex-shrink:     0;
 }
 
+/* ── Login card ─────────────────────────────── */
+.login-outer {
+  min-height:      100vh;
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  padding:         1rem;
+}
+.login-card {
+  background:    var(--bg1);
+  border:        1px solid var(--bdr2);
+  border-radius: var(--r3);
+  padding:       2.5rem 2rem;
+  width:         100%;
+  max-width:     420px;
+  box-shadow:    var(--shadow-lg);
+}
+
+/* ── Footer ─────────────────────────────────── */
 .footer {
-  position:fixed; bottom:0; left:0; right:0;
-  background:var(--bg1); border-top:1px solid var(--border);
-  padding:.5rem 1.5rem;
-  display:flex; align-items:center; justify-content:space-between;
-  font-size:.72rem; color:var(--t3); z-index:999;
+  position:        fixed;
+  bottom:          0; left: 0; right: 0;
+  background:      var(--bg1);
+  border-top:      1px solid var(--bdr);
+  padding:         .55rem 1.5rem;
+  display:         flex;
+  align-items:     center;
+  justify-content: space-between;
+  font-size:       .7rem;
+  color:           var(--t3);
+  z-index:         9999;
+  gap:             .5rem;
+  flex-wrap:       wrap;
 }
-.footer .brand { color:var(--acc); font-weight:600; }
+.footer .hi { color: var(--acc); font-weight: 600; }
 
-.user-chip {
-  display:flex; align-items:center; gap:.6rem;
-  background:var(--bg3); border:1px solid var(--border2);
-  border-radius:999px; padding:.4rem .9rem .4rem .5rem; margin-bottom:1rem;
-}
-.user-avatar {
-  width:32px; height:32px;
-  background:linear-gradient(135deg,var(--acc),var(--acc2));
-  border-radius:50%; display:flex; align-items:center; justify-content:center;
-  font-size:.8rem; font-weight:700; color:#07080a; flex-shrink:0;
+/* ── Section divider ────────────────────────── */
+.sec-title {
+  font-size:     .72rem;
+  font-weight:   700;
+  color:         var(--t3);
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  margin:        1.2rem 0 .6rem;
 }
 
-@media(max-width:640px){
-  .main .block-container { padding:1rem .75rem 5rem !important; }
-  [data-testid="stMetricValue"] { font-size:1.1rem !important; }
-  .page-icon { width:40px; height:40px; font-size:1.3rem; }
-  .page-title-text h2 { font-size:1.1rem; }
+/* ══════════════════════════════════════════════
+   MOBILE RESPONSIVE
+   Stack everything vertically on small screens
+═══════════════════════════════════════════════ */
+@media (max-width: 768px) {
+
+  /* Content padding */
+  .main .block-container { padding: 1rem .6rem 6rem !important; }
+
+  /* Metric values smaller */
+  [data-testid="stMetricValue"] { font-size: 1.1rem !important; }
+  [data-testid="stMetric"]      { padding: .75rem .9rem !important; }
+
+  /* Page header smaller */
+  .ph-icon { width: 38px; height: 38px; font-size: 1.2rem; }
+  .ph h2   { font-size: 1.05rem; }
+
+  /* Cards full-width padding */
+  .card { padding: .9rem 1rem; }
+
+  /* Forms: stack columns */
+  [data-testid="column"] {
+    width: 100% !important;
+    flex: 0 0 100% !important;
+    min-width: 100% !important;
+  }
+
+  /* Buttons full width on mobile */
+  .stButton > button {
+    font-size:  .88rem !important;
+    padding:    .7rem 1rem !important;
+  }
+
+  /* Tabs wrap nicely */
+  .stTabs [data-baseweb="tab"] { font-size: .76rem !important; padding: .35rem .55rem !important; }
+
+  /* Login card full width */
+  .login-card { padding: 1.8rem 1.2rem; }
+
+  /* Footer single line */
+  .footer { font-size: .65rem; padding: .4rem .75rem; }
+
+  /* Hide sidebar button text on mobile — icons still show */
+  section[data-testid="stSidebar"] .stRadio label { font-size: .82rem !important; }
 }
 </style>
 """
-st.markdown(CSS, unsafe_allow_html=True)
+st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
 
 
-# ══════════════════════════════════════════════
-#  DATABASE
-# ══════════════════════════════════════════════
+# ─────────────────────────────────────────────────────────────────────────────
+#  DATABASE LAYER
+# ─────────────────────────────────────────────────────────────────────────────
 
-def get_conn():
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
+def _conn():
+    c = sqlite3.connect(DB_PATH, check_same_thread=False)
+    c.row_factory = sqlite3.Row
+    return c
 
+def _hash(pw: str) -> str:
+    return hashlib.sha256(pw.encode("utf-8")).hexdigest()
 
-def hash_pw(pw: str) -> str:
-    return hashlib.sha256(pw.encode()).hexdigest()
+def qall(sql, p=()):
+    conn = _conn()
+    rows = conn.execute(sql, p).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def qone(sql, p=()):
+    conn = _conn()
+    row  = conn.execute(sql, p).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+def qrun(sql, p=()):
+    conn = _conn()
+    cur  = conn.execute(sql, p)
+    conn.commit()
+    lid  = cur.lastrowid
+    conn.close()
+    return lid
 
 
 def init_db():
-    conn = get_conn()
-    c = conn.cursor()
+    """Create all tables and seed the default admin account."""
+    conn = _conn()
+    c    = conn.cursor()
 
-    c.execute("""CREATE TABLE IF NOT EXISTS companies (
-        id         INTEGER PRIMARY KEY AUTOINCREMENT,
-        name       TEXT NOT NULL,
-        type       TEXT DEFAULT 'print_shop',
-        created_at TEXT DEFAULT (datetime('now','localtime'))
-    )""")
+    # companies — multi-tenant ready
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS companies (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            name       TEXT    NOT NULL,
+            type       TEXT    DEFAULT 'print_shop',
+            created_at TEXT    DEFAULT (datetime('now','localtime'))
+        )
+    """)
 
-    c.execute("""CREATE TABLE IF NOT EXISTS users (
-        id         INTEGER PRIMARY KEY AUTOINCREMENT,
-        full_name  TEXT NOT NULL,
-        email      TEXT UNIQUE NOT NULL,
-        password   TEXT NOT NULL,
-        role       TEXT NOT NULL,
-        company_id INTEGER DEFAULT 1,
-        is_active  INTEGER DEFAULT 1,
-        created_at TEXT DEFAULT (datetime('now','localtime'))
-    )""")
+    # users — admin-managed only (no self-registration)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            full_name  TEXT    NOT NULL,
+            username   TEXT    UNIQUE NOT NULL,
+            email      TEXT    UNIQUE NOT NULL,
+            password   TEXT    NOT NULL,
+            role       TEXT    NOT NULL,
+            company_id INTEGER DEFAULT 1,
+            is_active  INTEGER DEFAULT 1,
+            created_at TEXT    DEFAULT (datetime('now','localtime'))
+        )
+    """)
 
-    c.execute("""CREATE TABLE IF NOT EXISTS orders (
-        id                INTEGER PRIMARY KEY AUTOINCREMENT,
-        order_number      TEXT UNIQUE NOT NULL,
-        customer_name     TEXT NOT NULL,
-        description       TEXT NOT NULL,
-        quantity          INTEGER NOT NULL,
-        price             REAL NOT NULL,
-        company_id        INTEGER DEFAULT 1,
-        created_at        TEXT DEFAULT (datetime('now','localtime')),
-        created_by_id     INTEGER,
-        created_by_name   TEXT,
-        status            TEXT DEFAULT 'New',
-        design_status     TEXT DEFAULT 'Pending',
-        design_link       TEXT DEFAULT '',
-        design_file_path  TEXT DEFAULT '',
-        design_notes      TEXT DEFAULT '',
-        design_updated    TEXT DEFAULT '',
-        design_by         TEXT DEFAULT '',
-        purchase_status   TEXT DEFAULT 'Pending',
-        purchase_notes    TEXT DEFAULT '',
-        purchase_updated  TEXT DEFAULT '',
-        production_status TEXT DEFAULT 'Pending',
-        production_notes  TEXT DEFAULT '',
-        production_updated TEXT DEFAULT ''
-    )""")
+    # orders
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS orders (
+            id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_number       TEXT    UNIQUE NOT NULL,
+            customer_name      TEXT    NOT NULL,
+            description        TEXT    NOT NULL,
+            quantity           INTEGER NOT NULL,
+            price              REAL    NOT NULL,
+            company_id         INTEGER DEFAULT 1,
+            created_at         TEXT    DEFAULT (datetime('now','localtime')),
+            created_by_id      INTEGER,
+            created_by_name    TEXT,
+            status             TEXT    DEFAULT 'New',
+            design_status      TEXT    DEFAULT 'Pending',
+            design_link        TEXT    DEFAULT '',
+            design_file_path   TEXT    DEFAULT '',
+            design_notes       TEXT    DEFAULT '',
+            design_updated     TEXT    DEFAULT '',
+            design_by          TEXT    DEFAULT '',
+            purchase_status    TEXT    DEFAULT 'Pending',
+            purchase_notes     TEXT    DEFAULT '',
+            purchase_updated   TEXT    DEFAULT '',
+            production_status  TEXT    DEFAULT 'Pending',
+            production_notes   TEXT    DEFAULT '',
+            production_updated TEXT    DEFAULT ''
+        )
+    """)
 
-    c.execute("""CREATE TABLE IF NOT EXISTS agent_visits (
-        id            INTEGER PRIMARY KEY AUTOINCREMENT,
-        agent_id      INTEGER,
-        agent_name    TEXT,
-        customer_name TEXT NOT NULL,
-        location_text TEXT DEFAULT '',
-        lat           REAL DEFAULT 0,
-        lng           REAL DEFAULT 0,
-        status        TEXT DEFAULT 'potential',
-        notes         TEXT DEFAULT '',
-        image_path    TEXT DEFAULT '',
-        visited_at    TEXT DEFAULT (datetime('now','localtime'))
-    )""")
+    # agent visits
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS agent_visits (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            agent_id      INTEGER,
+            agent_name    TEXT,
+            customer_name TEXT    NOT NULL,
+            location_text TEXT    DEFAULT '',
+            lat           REAL    DEFAULT 0,
+            lng           REAL    DEFAULT 0,
+            status        TEXT    DEFAULT 'potential',
+            notes         TEXT    DEFAULT '',
+            image_path    TEXT    DEFAULT '',
+            visited_at    TEXT    DEFAULT (datetime('now','localtime'))
+        )
+    """)
 
-    c.execute("""CREATE TABLE IF NOT EXISTS incident_reports (
-        id            INTEGER PRIMARY KEY AUTOINCREMENT,
-        reporter_id   INTEGER,
-        reporter_name TEXT,
-        department    TEXT,
-        description   TEXT NOT NULL,
-        severity      TEXT DEFAULT 'medium',
-        status        TEXT DEFAULT 'open',
-        created_at    TEXT DEFAULT (datetime('now','localtime')),
-        resolved_at   TEXT DEFAULT ''
-    )""")
+    # incident reports
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS incident_reports (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            reporter_id   INTEGER,
+            reporter_name TEXT,
+            department    TEXT,
+            description   TEXT NOT NULL,
+            severity      TEXT DEFAULT 'medium',
+            status        TEXT DEFAULT 'open',
+            created_at    TEXT DEFAULT (datetime('now','localtime')),
+            resolved_at   TEXT DEFAULT ''
+        )
+    """)
 
+    # seed default company
+    c.execute("INSERT OR IGNORE INTO companies (id, name) VALUES (1, 'Z-Order Print Shop')")
+
+    # seed default admin — username: admin, email: admin@zorder.iq
     try:
-        c.execute("INSERT OR IGNORE INTO companies (id,name) VALUES (1,'Z-Order Print Shop')")
-    except Exception:
-        pass
-
-    try:
-        c.execute("""INSERT INTO users (full_name,email,password,role,company_id)
-                     VALUES (?,?,?,?,?)""",
-                  ("المدير العام", "admin@zorder.iq", hash_pw("Admin@2025"), "admin", 1))
+        c.execute("""
+            INSERT INTO users (full_name, username, email, password, role, company_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, ("المدير العام", "admin", "admin@zorder.iq", _hash("Admin@2025"), "admin", 1))
     except sqlite3.IntegrityError:
         pass
 
@@ -365,399 +644,378 @@ def init_db():
     conn.close()
 
 
-def db_fetchall(query, params=()):
-    conn = get_conn()
-    rows = conn.execute(query, params).fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
-
-
-def db_fetchone(query, params=()):
-    conn = get_conn()
-    row = conn.execute(query, params).fetchone()
-    conn.close()
-    return dict(row) if row else None
-
-
-def db_execute(query, params=()):
-    conn = get_conn()
-    cur = conn.execute(query, params)
-    conn.commit()
-    lid = cur.lastrowid
-    conn.close()
-    return lid
-
-
-def gen_order_no():
-    row = db_fetchone("SELECT COUNT(*) c FROM orders")
+def new_order_no() -> str:
+    row   = qone("SELECT COUNT(*) c FROM orders")
     count = row["c"] if row else 0
     today = datetime.date.today().strftime("%y%m%d")
     return f"ZO-{today}-{count+1:04d}"
 
 
-def update_order_status(order_id):
-    o = db_fetchone("SELECT design_status,purchase_status,production_status FROM orders WHERE id=?", (order_id,))
+def refresh_order_status(oid: int):
+    """Recompute the master status from sub-statuses."""
+    o = qone("SELECT design_status, purchase_status, production_status FROM orders WHERE id=?", (oid,))
     if not o:
         return
     ds, ps, prs = o["design_status"], o["purchase_status"], o["production_status"]
     if   prs == "Done":                    s = "Completed"
     elif prs == "Printing":               s = "In Production"
-    elif ds == "Done" and ps == "Ready":  s = "Ready for Production"
-    elif ds == "Done":                    s = "Design Done"
-    elif ps == "Ready":                   s = "Materials Ready"
+    elif ds  == "Done" and ps == "Ready": s = "Ready for Production"
+    elif ds  == "Done":                   s = "Design Done"
+    elif ps  == "Ready":                  s = "Materials Ready"
     else:                                 s = "New"
-    db_execute("UPDATE orders SET status=? WHERE id=?", (s, order_id))
+    qrun("UPDATE orders SET status=? WHERE id=?", (s, oid))
 
 
-# ══════════════════════════════════════════════
+# ─────────────────────────────────────────────────────────────────────────────
 #  UI HELPERS
-# ══════════════════════════════════════════════
+# ─────────────────────────────────────────────────────────────────────────────
 
-STATUS_MAP = {
-    "New":                  ("b-new",      "🔵 جديد"),
-    "Design Done":          ("b-design",   "🟣 تصميم جاهز"),
-    "Materials Ready":      ("b-purchase", "🟡 مواد جاهزة"),
-    "Ready for Production": ("b-ready",    "🟢 جاهز للإنتاج"),
-    "In Production":        ("b-printing", "🟠 تحت الطباعة"),
-    "Completed":            ("b-done",     "✅ مكتمل"),
+# Status → badge class + Arabic label
+STATUS_BADGES = {
+    "New":                  ("b-new",     "🔵 جديد"),
+    "Design Done":          ("b-design",  "🟣 تصميم جاهز"),
+    "Materials Ready":      ("b-purchase","🟡 مواد جاهزة"),
+    "Ready for Production": ("b-ready",   "🟢 جاهز للإنتاج"),
+    "In Production":        ("b-print",   "🟠 تحت الطباعة"),
+    "Completed":            ("b-done",    "✅ مكتمل"),
 }
-AGENT_STATUS_MAP = {
-    "bought":    ("b-agent-buy", "✅ اشترى"),
-    "potential": ("b-agent-pot", "🔵 محتمل"),
-    "no":        ("b-agent-no",  "❌ لن يشتري"),
+AGENT_BADGES = {
+    "bought":    ("b-abuy", "✅ اشترى"),
+    "potential": ("b-apot", "🔵 محتمل"),
+    "no":        ("b-ano",  "❌ لن يشتري"),
 }
-SEV_MAP = {
-    "low":    ("b-ready",    "🟢 منخفض"),
-    "medium": ("b-purchase", "🟡 متوسط"),
-    "high":   ("b-printing", "🔴 عالي"),
+SEV_BADGES = {
+    "low":    ("b-sev-lo", "🟢 منخفض"),
+    "medium": ("b-sev-md", "🟡 متوسط"),
+    "high":   ("b-sev-hi", "🔴 عالي"),
 }
 
+def mk_badge(key, table=None):
+    t = table or STATUS_BADGES
+    cls, lbl = t.get(key, ("b-new", key))
+    return f'<span class="badge {cls}">{lbl}</span>'
 
-def badge(key, maps=None):
-    if maps is None:
-        maps = STATUS_MAP
-    cls, label = maps.get(key, ("b-new", key))
-    return f'<span class="badge {cls}">{label}</span>'
-
-
-def page_header(icon, title, sub=""):
+def page_hdr(icon, title, sub=""):
     st.markdown(
-        f'<div class="page-header">'
-        f'<div class="page-icon">{icon}</div>'
-        f'<div class="page-title-text"><h2>{title}</h2><p>{sub}</p></div>'
-        f'</div>', unsafe_allow_html=True)
+        f'<div class="ph">'
+        f'  <div class="ph-icon">{icon}</div>'
+        f'  <div><h2>{title}</h2><p>{sub}</p></div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
-
-GUIDES = {
-    "sales": """
-📌 <b>مهامك كقسم مبيعات:</b><br>
-① إضافة أوردر جديد بكل تفاصيله (العميل، الوصف، الكمية، السعر)<br>
-② متابعة حالة أوردراتك في الجدول<br>
-③ الاطلاع على التقارير المالية<br>
-⚠️ السعر والتقارير المالية سرية ولا تظهر لباقي الأقسام
-    """,
-    "design": """
-📌 <b>مهامك كقسم تصميم:</b><br>
-① مراجعة الأوردرات الجديدة الواردة من المبيعات<br>
-② رفع ملف التصميم أو إضافة رابطه<br>
-③ تغيير حالة التصميم إلى (Done) بعد الانتهاء<br>
-④ الإنتاج لن يبدأ إلا بعد إتمام التصميم والمشتريات معاً
-    """,
-    "purchase": """
-📌 <b>مهامك كقسم مشتريات:</b><br>
-① مراجعة الأوردرات وتحديد المواد المطلوبة<br>
-② تأكيد توفر المواد بالضغط على (Materials Ready)<br>
-③ الإنتاج يبدأ فقط بعد تأكيد التصميم + المشتريات
-    """,
-    "production": """
-📌 <b>مهامك كقسم إنتاج:</b><br>
-① انتظر الأوردرات التي اكتملت فيها التصميم والمشتريات<br>
-② حمّل ملف التصميم قبل الطباعة<br>
-③ ابدأ الطباعة وعند الانتهاء غيّر الحالة إلى (Done)
-    """,
-    "agent": """
-📌 <b>مهامك كمندوب مبيعات:</b><br>
-① سجّل زيارة كل عميل مع صورة المحل وموقعه<br>
-② حدّد حالة العميل: اشترى / محتمل / لن يشتري<br>
-③ المدير يتابع أداءك من لوحة التحكم
-    """,
-    "admin": """
-📌 <b>صلاحيات المدير العام:</b><br>
-① الاطلاع على إحصائيات النظام بالكامل<br>
-② إدارة المستخدمين وإضافة موظفين جدد<br>
-③ مراجعة بلاغات الأعطال من جميع الأقسام<br>
-④ الاطلاع على تقارير المندوبين والتقارير المالية
-    """,
-}
-
-
-def guide_box(role_key):
-    text = GUIDES.get(role_key, "")
-    if text:
+def guide(role_key: str):
+    """Show a collapsible guide card for the given role."""
+    texts = {
+        "sales": (
+            "📌 <b>مهامك كقسم مبيعات:</b><br>"
+            "① أضف أوردراً جديداً بتفاصيل العميل والكمية والسعر<br>"
+            "② تابع حالة أوردراتك من قائمة «أوردراتي»<br>"
+            "③ السعر والتقارير المالية سرية ولا تظهر للأقسام الأخرى"
+        ),
+        "design": (
+            "📌 <b>مهامك كقسم تصميم:</b><br>"
+            "① راجع الأوردرات الواردة من المبيعات<br>"
+            "② ارفع ملف التصميم أو أضف رابطه<br>"
+            "③ عدّل الحالة إلى (Done) — الإنتاج لن يبدأ إلا بعد التصميم والمشتريات معاً"
+        ),
+        "production": (
+            "📌 <b>مهامك كقسم إنتاج:</b><br>"
+            "① الأوردرات الجاهزة هي فقط التي أُتمّ فيها التصميم وتوفرت موادها<br>"
+            "② حمّل ملف التصميم وابدأ الطباعة<br>"
+            "③ عند الانتهاء غيّر الحالة إلى Done"
+        ),
+        "agent": (
+            "📌 <b>مهامك كمندوب مبيعات:</b><br>"
+            "① سجّل زيارتك لكل عميل مع صورة المحل وموقعه<br>"
+            "② حدّد حالته: اشترى / محتمل / لن يشتري<br>"
+            "③ المدير يتابع أداءك وزياراتك من لوحته"
+        ),
+        "admin": (
+            "📌 <b>صلاحياتك كمدير عام:</b><br>"
+            "① أنت الوحيد الذي يستطيع إضافة موظفين جدد وتعطيلهم<br>"
+            "② راقب إحصائيات النظام والبلاغات والمندوبين<br>"
+            "③ لديك وصول كامل لجميع الأوردرات والتقارير المالية"
+        ),
+    }
+    txt = texts.get(role_key, "")
+    if txt:
         with st.expander("💡 كيف يعمل هذا القسم؟", expanded=False):
-            st.markdown(f'<div class="guide-box">{text}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="info-card">{txt}</div>', unsafe_allow_html=True)
 
-
-def footer():
+def footer_bar():
+    yr = datetime.date.today().year
     st.markdown(
         f'<div class="footer">'
-        f'<span>🖨️ <span class="brand">{APP_NAME}</span> v{APP_VER}</span>'
-        f'<span>Developed by <span class="brand">{DEVELOPER}</span></span>'
-        f'<span style="color:var(--t3)">© {datetime.date.today().year}</span>'
-        f'</div>', unsafe_allow_html=True)
+        f'  <span>🖨️ <span class="hi">{APP_NAME}</span> &nbsp;v{APP_VER}</span>'
+        f'  <span>Developed by <span class="hi">{DEVELOPER}</span></span>'
+        f'  <span>© {yr} All rights reserved</span>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
 
-
-def save_upload(uploaded_file, subfolder="designs") -> str:
-    if not uploaded_file:
+def save_file(uploaded, sub="designs") -> str:
+    if not uploaded:
         return ""
-    d = UPLOAD_DIR / subfolder
+    d  = UPLOAD_DIR / sub
     d.mkdir(exist_ok=True)
     ts = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-    safe = "".join(c for c in uploaded_file.name if c.isalnum() or c in "._-")
-    path = d / f"{ts}_{safe}"
-    path.write_bytes(uploaded_file.read())
-    return str(path)
+    safe = "".join(ch for ch in uploaded.name if ch.isalnum() or ch in "._-")
+    p  = d / f"{ts}_{safe}"
+    p.write_bytes(uploaded.read())
+    return str(p)
 
-
-def download_btn(file_path: str, label="⬇️ تحميل الملف"):
-    p = Path(file_path)
+def dl_button(fpath: str, label="⬇️ تحميل الملف"):
+    p = Path(fpath)
     if p.exists():
         st.download_button(label, p.read_bytes(), file_name=p.name, use_container_width=True)
     else:
-        st.caption("⚠️ الملف غير موجود")
+        st.caption("⚠️ الملف غير متوفر على الخادم")
 
-
-def show_orders_table(role, filter_by_user_id=None):
+def orders_table(role, uid_filter=None):
+    """Render a filterable orders table with price hidden for non-privileged roles."""
     hide_price = role not in ("admin", "sales")
-    query = "SELECT * FROM orders"
-    params = []
-    if filter_by_user_id:
-        query += " WHERE created_by_id=?"
-        params.append(filter_by_user_id)
-    query += " ORDER BY id DESC"
-    rows = db_fetchall(query, params)
+    sql  = "SELECT * FROM orders"
+    pars = []
+    if uid_filter:
+        sql += " WHERE created_by_id=?"
+        pars.append(uid_filter)
+    sql += " ORDER BY id DESC"
+    rows = qall(sql, pars)
     if not rows:
         st.info("لا توجد أوردرات بعد.")
         return
-    statuses = ["الكل"] + list({r["status"] for r in rows})
-    sel = st.selectbox("📌 فلتر الحالة", statuses, key=f"f_{role}_{filter_by_user_id}")
+
+    statuses = ["الكل"] + sorted({r["status"] for r in rows})
+    sel = st.selectbox("📌 فلتر الحالة", statuses, key=f"flt_{role}_{uid_filter}")
     if sel != "الكل":
         rows = [r for r in rows if r["status"] == sel]
-    cols = ["order_number","customer_name","description","quantity","status",
-            "design_status","purchase_status","production_status","created_at"]
+
+    cols = ["order_number","customer_name","description","quantity",
+            "status","design_status","purchase_status","production_status","created_at"]
     if not hide_price:
         cols.insert(4, "price")
-    labels = {
-        "order_number":"رقم الأوردر","customer_name":"العميل","description":"الوصف",
-        "quantity":"الكمية","price":"السعر","status":"الحالة",
-        "design_status":"التصميم","purchase_status":"المشتريات",
-        "production_status":"الإنتاج","created_at":"التاريخ",
+
+    renames = {
+        "order_number":"رقم الأوردر","customer_name":"العميل",
+        "description":"الوصف","quantity":"الكمية","price":"السعر (د.ع)",
+        "status":"الحالة","design_status":"التصميم",
+        "purchase_status":"المشتريات","production_status":"الإنتاج",
+        "created_at":"التاريخ",
     }
     df = pd.DataFrame(rows)
-    existing = [c for c in cols if c in df.columns]
-    st.dataframe(df[existing].rename(columns=labels), use_container_width=True, hide_index=True)
+    ok = [c for c in cols if c in df.columns]
+    st.dataframe(df[ok].rename(columns=renames), use_container_width=True, hide_index=True)
 
 
-# ══════════════════════════════════════════════
-#  AUTH
-# ══════════════════════════════════════════════
+# ─────────────────────────────────────────────────────────────────────────────
+#  ██████  GATEKEEPER LOGIN  ██████
+#  Nothing is rendered until credentials are verified.
+# ─────────────────────────────────────────────────────────────────────────────
 
-def page_login():
-    st.markdown('<div style="max-width:460px;margin:3rem auto;">', unsafe_allow_html=True)
+def gatekeeper():
+    """
+    Strict login screen.
+    Accepts email OR username + password.
+    Stores user info in st.session_state on success.
+    Returns True if authenticated, False otherwise.
+    """
+    if "authenticated" in st.session_state and st.session_state["authenticated"]:
+        return True
+
+    # Hide sidebar entirely on login screen
     st.markdown(
-        f'<div style="text-align:center;margin-bottom:2rem">'
-        f'<div class="z-logo">Z<span class="dash">-</span>Order</div>'
-        f'<div style="color:var(--t3);font-size:.85rem;margin-top:.4rem">Print Workflow Platform</div>'
-        f'</div>', unsafe_allow_html=True)
+        "<style>section[data-testid='stSidebar']{display:none!important}</style>",
+        unsafe_allow_html=True,
+    )
 
-    tab_in, tab_up = st.tabs(["🔑  تسجيل الدخول", "📝  إنشاء حساب"])
+    # Centered login card
+    col = st.columns([1, 1.6, 1])[1]
+    with col:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown(
+            f'<div style="text-align:center;margin-bottom:2rem">'
+            f'  <div class="z-logo">Z<span class="sep">-</span>Order</div>'
+            f'  <div style="color:var(--t3);font-size:.82rem;margin-top:.4rem">'
+            f'    Print Workflow Platform &nbsp;·&nbsp; v{APP_VER}'
+            f'  </div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
-    with tab_in:
-        email = st.text_input("📧 الإيميل", placeholder="you@company.com", key="li_email")
-        pw    = st.text_input("🔒 كلمة المرور", type="password", key="li_pw")
-        if st.button("دخول →", key="li_btn"):
-            user = db_fetchone(
-                "SELECT * FROM users WHERE email=? AND password=? AND is_active=1",
-                (email.strip().lower(), hash_pw(pw))
+        st.markdown(
+            '<div style="background:var(--bg2);border:1px solid var(--bdr2);'
+            'border-radius:var(--r2);padding:2rem 1.75rem">',
+            unsafe_allow_html=True,
+        )
+
+        st.markdown(
+            '<div class="sec-title" style="text-align:center;margin-top:0">تسجيل الدخول</div>',
+            unsafe_allow_html=True,
+        )
+
+        identifier = st.text_input(
+            "📧 الإيميل أو اسم المستخدم",
+            placeholder="admin@zorder.iq  أو  admin",
+            key="gk_id",
+        )
+        password = st.text_input(
+            "🔒 كلمة المرور",
+            type="password",
+            placeholder="••••••••",
+            key="gk_pw",
+        )
+
+        login_clicked = st.button("دخول ←", key="gk_btn")
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        if login_clicked:
+            if not identifier or not password:
+                st.error("يرجى إدخال بيانات الدخول.")
+                return False
+
+            ident = identifier.strip().lower()
+            user  = qone(
+                """SELECT * FROM users
+                   WHERE (lower(email)=? OR lower(username)=?)
+                     AND password=?
+                     AND is_active=1""",
+                (ident, ident, _hash(password))
             )
             if user:
-                st.session_state.update({
-                    "uid": user["id"], "uname": user["full_name"],
-                    "email": user["email"], "role": user["role"],
-                    "company_id": user["company_id"],
-                })
+                st.session_state["authenticated"] = True
+                st.session_state["uid"]           = user["id"]
+                st.session_state["uname"]         = user["full_name"]
+                st.session_state["username"]      = user["username"]
+                st.session_state["email"]         = user["email"]
+                st.session_state["role"]          = user["role"]
+                st.session_state["company_id"]    = user["company_id"]
                 st.rerun()
             else:
-                st.error("❌ بيانات غير صحيحة أو الحساب غير نشط.")
+                st.error("❌ بيانات الدخول غير صحيحة أو الحساب موقوف.")
 
-    with tab_up:
-        name    = st.text_input("👤 الاسم الكامل", key="su_name")
-        su_em   = st.text_input("📧 الإيميل", key="su_email")
-        su_role = st.selectbox("🏢 القسم الوظيفي",
-                                ["sales","design","purchase","production","agent"],
-                                format_func=lambda r: f"{ROLES[r]['icon']} {ROLES[r]['label']}",
-                                key="su_role")
-        su_pw  = st.text_input("🔒 كلمة المرور", type="password", key="su_pw")
-        su_pw2 = st.text_input("🔒 تأكيد كلمة المرور", type="password", key="su_pw2")
-        if st.button("إنشاء الحساب →", key="su_btn"):
-            if not all([name, su_em, su_pw]):
-                st.error("يرجى تعبئة جميع الحقول.")
-            elif su_pw != su_pw2:
-                st.error("كلمتا المرور غير متطابقتين.")
-            elif len(su_pw) < 6:
-                st.error("كلمة المرور يجب أن تكون 6 أحرف على الأقل.")
-            else:
-                try:
-                    db_execute(
-                        "INSERT INTO users(full_name,email,password,role) VALUES(?,?,?,?)",
-                        (name.strip(), su_em.strip().lower(), hash_pw(su_pw), su_role)
-                    )
-                    st.success("✅ تم إنشاء الحساب! سجّل دخولك الآن.")
-                except sqlite3.IntegrityError:
-                    st.error("❌ هذا الإيميل مسجل بالفعل.")
+        st.markdown(
+            f'<div style="text-align:center;margin-top:1.5rem;'
+            f'color:var(--t3);font-size:.68rem">'
+            f'Developed by <b style="color:var(--acc)">{DEVELOPER}</b>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
-    st.markdown(
-        f'<div style="text-align:center;margin-top:2rem;color:var(--t3);font-size:.72rem">'
-        f'Developed by <b style="color:var(--acc)">{DEVELOPER}</b>'
-        f'&nbsp;|&nbsp;{APP_NAME} v{APP_VER}'
-        f'</div>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+    return False
 
 
-# ══════════════════════════════════════════════
-#  SIDEBAR
-# ══════════════════════════════════════════════
+# ─────────────────────────────────────────────────────────────────────────────
+#  SIDEBAR  — role-aware navigation
+# ─────────────────────────────────────────────────────────────────────────────
 
-PAGES_BY_ROLE = {
-    "admin":      ["📊 لوحة المدير",      "📋 كل الأوردرات",    "💰 التقارير المالية",
-                   "🗺️ تقارير المندوبين",  "🚨 بلاغات الأعطال",  "👥 إدارة المستخدمين"],
-    "sales":      ["📊 لوحتي",            "➕ أوردر جديد",      "📋 أوردراتي",
-                   "💰 التقارير المالية",  "🚨 بلاغ خلل"],
-    "design":     ["📊 لوحتي",            "🎨 مهام التصميم",    "📋 كل الأوردرات",    "🚨 بلاغ خلل"],
-    "purchase":   ["📊 لوحتي",            "📦 المواد",          "📋 كل الأوردرات",    "🚨 بلاغ خلل"],
-    "production": ["📊 لوحتي",            "🖨️ الإنتاج",        "📋 كل الأوردرات",    "🚨 بلاغ خلل"],
-    "agent":      ["📊 لوحتي",            "🗺️ تسجيل زيارة",    "📋 زياراتي",         "🚨 بلاغ خلل"],
-}
-
-
-def sidebar():
+def build_sidebar() -> str:
     role  = st.session_state["role"]
     uname = st.session_state["uname"]
-    rinfo = ROLES.get(role, {"label": role, "icon": "👤"})
-    initials = "".join(w[0] for w in uname.split()[:2]).upper() or "U"
+    rinfo = ROLES.get(role, {"label": role, "icon": "👤", "color": "#e8a020"})
 
+    initials = "".join(w[0] for w in uname.split()[:2]).upper() or "?"
+
+    # Logo
     st.sidebar.markdown(
-        f'<div style="padding:.5rem 0 .25rem">'
-        f'<div class="z-logo">Z<span class="dash">-</span>Order</div>'
-        f'<div style="color:var(--t3);font-size:.72rem">Print Workflow Platform</div>'
-        f'</div>', unsafe_allow_html=True)
+        f'<div style="padding:.4rem 0 .2rem">'
+        f'  <div class="z-logo">Z<span class="sep">-</span>Order</div>'
+        f'  <div style="color:var(--t3);font-size:.7rem;margin-top:2px">'
+        f'    Print Workflow Platform'
+        f'  </div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
     st.sidebar.markdown("---")
-    st.sidebar.markdown(
-        f'<div class="user-chip">'
-        f'<div class="user-avatar">{initials}</div>'
-        f'<div><div style="font-size:.82rem;font-weight:600">{uname}</div>'
-        f'<div style="font-size:.68rem;color:var(--acc)">{rinfo["icon"]} {rinfo["label"]}</div></div>'
-        f'</div>', unsafe_allow_html=True)
 
-    pages = PAGES_BY_ROLE.get(role, [])
-    page  = st.sidebar.radio("", pages, label_visibility="collapsed")
+    # User chip — name + role
+    st.sidebar.markdown(
+        f'<div class="uchip">'
+        f'  <div class="uavatar">{initials}</div>'
+        f'  <div>'
+        f'    <div style="font-size:.84rem;font-weight:600;line-height:1.2">{uname}</div>'
+        f'    <div style="font-size:.69rem;color:{rinfo["color"]};margin-top:1px">'
+        f'      {rinfo["icon"]} {rinfo["label"]}'
+        f'    </div>'
+        f'  </div>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Navigation
+    pages  = ROLE_PAGES.get(role, [])
+    active = st.sidebar.radio("nav", pages, label_visibility="collapsed")
 
     st.sidebar.markdown("---")
-    st.sidebar.markdown(
-        f'<div style="font-size:.68rem;color:var(--t3);text-align:center;line-height:1.8">'
-        f'Developed by<br><b style="color:var(--acc)">{DEVELOPER}</b>'
-        f'</div>', unsafe_allow_html=True)
 
-    if st.sidebar.button("🚪 تسجيل الخروج"):
+    # Developer credit in sidebar
+    st.sidebar.markdown(
+        f'<div style="font-size:.66rem;color:var(--t3);text-align:center;line-height:1.9">'
+        f'  Developed by<br>'
+        f'  <b style="color:var(--acc)">{DEVELOPER}</b>'
+        f'</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Logout
+    st.sidebar.markdown("<br>", unsafe_allow_html=True)
+    if st.sidebar.button("🚪  تسجيل الخروج"):
         for k in list(st.session_state.keys()):
             del st.session_state[k]
         st.rerun()
 
-    return page
+    return active
 
 
-# ══════════════════════════════════════════════
+# ─────────────────────────────────────────────────────────────────────────────
 #  PAGES
-# ══════════════════════════════════════════════
+# ─────────────────────────────────────────────────────────────────────────────
 
-def page_dashboard():
-    role = st.session_state["role"]
-    page_header("📊", "لوحة التحكم", "نظرة عامة على الأوردرات")
-    guide_box(role)
+# ── ADMIN: Dashboard ──────────────────────────────────────────────────────────
+def pg_admin_dash():
+    page_hdr("🛡️", "لوحة المدير العام", "إحصائيات حية وإدارة شاملة للنظام")
+    guide("admin")
 
-    total  = (db_fetchone("SELECT COUNT(*) c FROM orders") or {}).get("c", 0)
-    new_   = (db_fetchone("SELECT COUNT(*) c FROM orders WHERE status='New'") or {}).get("c", 0)
-    inprod = (db_fetchone("SELECT COUNT(*) c FROM orders WHERE production_status='Printing'") or {}).get("c", 0)
-    done   = (db_fetchone("SELECT COUNT(*) c FROM orders WHERE production_status='Done'") or {}).get("c", 0)
+    today   = datetime.date.today().isoformat()
+    total   = (qone("SELECT COUNT(*) c FROM orders")  or {}).get("c", 0)
+    today_o = (qone("SELECT COUNT(*) c FROM orders WHERE created_at LIKE ?", (f"{today}%",)) or {}).get("c", 0)
+    done    = (qone("SELECT COUNT(*) c FROM orders WHERE production_status='Done'") or {}).get("c", 0)
+    rev     = (qone("SELECT COALESCE(SUM(price),0) s FROM orders WHERE production_status='Done'") or {}).get("s", 0)
+    total_v = (qone("SELECT COALESCE(SUM(price),0) s FROM orders") or {}).get("s", 0)
+    open_r  = (qone("SELECT COUNT(*) c FROM incident_reports WHERE status='open'") or {}).get("c", 0)
+    agents  = (qone("SELECT COUNT(DISTINCT agent_id) c FROM agent_visits WHERE visited_at LIKE ?", (f"{today}%",)) or {}).get("c", 0)
+    users   = (qone("SELECT COUNT(*) c FROM users WHERE is_active=1") or {}).get("c", 0)
 
-    if role in ("admin", "sales"):
-        rev    = (db_fetchone("SELECT COALESCE(SUM(price),0) s FROM orders WHERE production_status='Done'") or {}).get("s", 0)
-        total_v= (db_fetchone("SELECT COALESCE(SUM(price),0) s FROM orders") or {}).get("s", 0)
-        c1,c2,c3,c4,c5,c6 = st.columns(6)
-        c1.metric("إجمالي", total)
-        c2.metric("جديدة",  new_)
-        c3.metric("طباعة",  inprod)
-        c4.metric("مكتملة", done)
-        c5.metric("إيراد (د.ع)",  f"{rev:,.0f}")
-        c6.metric("إجمالي القيمة", f"{total_v:,.0f}")
-    else:
-        c1,c2,c3,c4 = st.columns(4)
-        c1.metric("إجمالي", total)
-        c2.metric("جديدة",  new_)
-        c3.metric("طباعة",  inprod)
-        c4.metric("مكتملة", done)
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("أوردرات اليوم",          today_o)
+    c2.metric(f"مكتملة / الإجمالي",    f"{done} / {total}")
+    c3.metric("إيراد المكتمل (د.ع)",    f"{rev:,.0f}")
+    c4.metric("بلاغات مفتوحة",          open_r)
 
-    st.markdown("---")
-    st.markdown("**آخر ١٠ أوردرات**")
-    rows = db_fetchall(
-        "SELECT order_number,customer_name,description,quantity,status,created_at "
-        "FROM orders ORDER BY id DESC LIMIT 10"
-    )
-    if rows:
-        st.dataframe(pd.DataFrame(rows).rename(columns={
-            "order_number":"رقم الأوردر","customer_name":"العميل",
-            "description":"الوصف","quantity":"الكمية",
-            "status":"الحالة","created_at":"التاريخ"
-        }), use_container_width=True, hide_index=True)
-
-
-def page_admin_dashboard():
-    page_header("🛡️", "لوحة المدير العام", "إحصائيات حية وإدارة شاملة")
-    guide_box("admin")
-
-    today    = datetime.date.today().isoformat()
-    total    = (db_fetchone("SELECT COUNT(*) c FROM orders") or {}).get("c", 0)
-    today_o  = (db_fetchone("SELECT COUNT(*) c FROM orders WHERE created_at LIKE ?", (f"{today}%",)) or {}).get("c", 0)
-    done     = (db_fetchone("SELECT COUNT(*) c FROM orders WHERE production_status='Done'") or {}).get("c", 0)
-    rev      = (db_fetchone("SELECT COALESCE(SUM(price),0) s FROM orders WHERE production_status='Done'") or {}).get("s", 0)
-    total_v  = (db_fetchone("SELECT COALESCE(SUM(price),0) s FROM orders") or {}).get("s", 0)
-    open_r   = (db_fetchone("SELECT COUNT(*) c FROM incident_reports WHERE status='open'") or {}).get("c", 0)
-    agents   = (db_fetchone("SELECT COUNT(DISTINCT agent_id) c FROM agent_visits WHERE visited_at LIKE ?", (f"{today}%",)) or {}).get("c", 0)
-
-    c1,c2,c3,c4 = st.columns(4)
-    c1.metric("أوردرات اليوم",       today_o)
-    c2.metric(f"مكتملة / إجمالي",   f"{done}/{total}")
-    c3.metric("إيراد المكتمل (د.ع)", f"{rev:,.0f}")
-    c4.metric("بلاغات مفتوحة",       open_r)
-
-    c5,c6 = st.columns(2)
+    c5, c6, c7, c8 = st.columns(4)
     c5.metric("إجمالي قيمة الأوردرات", f"{total_v:,.0f} د.ع")
-    c6.metric("مندوبون نشطون اليوم",   agents)
+    c6.metric("قيد التنفيذ (د.ع)",      f"{total_v - rev:,.0f}")
+    c7.metric("مندوبون نشطون اليوم",   agents)
+    c8.metric("موظفون نشطون",           users)
 
     st.markdown("---")
-    tab1, tab2, tab3 = st.tabs(["📋 الأوردرات الحديثة", "🗺️ أداء المندوبين", "🚨 آخر البلاغات"])
+    tab1, tab2, tab3 = st.tabs(["📋 آخر الأوردرات", "🗺️ أداء المندوبين", "🚨 آخر البلاغات"])
 
     with tab1:
-        rows = db_fetchall("SELECT order_number,customer_name,quantity,status,created_at FROM orders ORDER BY id DESC LIMIT 15")
+        rows = qall("SELECT order_number,customer_name,quantity,price,status,created_at FROM orders ORDER BY id DESC LIMIT 15")
         if rows:
             st.dataframe(pd.DataFrame(rows).rename(columns={
                 "order_number":"رقم الأوردر","customer_name":"العميل",
-                "quantity":"الكمية","status":"الحالة","created_at":"التاريخ"
+                "quantity":"الكمية","price":"السعر","status":"الحالة","created_at":"التاريخ"
             }), use_container_width=True, hide_index=True)
+        else:
+            st.info("لا توجد أوردرات.")
 
     with tab2:
-        rows = db_fetchall("""
-            SELECT agent_name,COUNT(*) visits,
+        rows = qall("""
+            SELECT agent_name,
+                   COUNT(*) visits,
                    SUM(CASE WHEN status='bought'    THEN 1 ELSE 0 END) bought,
                    SUM(CASE WHEN status='potential' THEN 1 ELSE 0 END) potential,
                    SUM(CASE WHEN status='no'        THEN 1 ELSE 0 END) lost
@@ -772,7 +1030,10 @@ def page_admin_dashboard():
             st.info("لا توجد زيارات بعد.")
 
     with tab3:
-        rows = db_fetchall("SELECT reporter_name,department,description,severity,status,created_at FROM incident_reports ORDER BY id DESC LIMIT 10")
+        rows = qall("""
+            SELECT reporter_name,department,description,severity,status,created_at
+            FROM incident_reports ORDER BY id DESC LIMIT 10
+        """)
         if rows:
             st.dataframe(pd.DataFrame(rows).rename(columns={
                 "reporter_name":"المبلّغ","department":"القسم",
@@ -783,182 +1044,275 @@ def page_admin_dashboard():
             st.success("🎉 لا توجد بلاغات مفتوحة!")
 
 
-def page_add_order():
-    page_header("➕", "إضافة أوردر جديد", "أدخل تفاصيل طلب العميل")
-    guide_box("sales")
-    with st.form("add_order", clear_on_submit=True):
+# ── ADMIN: Employee Management ────────────────────────────────────────────────
+def pg_employees():
+    page_hdr("👥", "إدارة الموظفين", "أضف أعضاء الفريق وتحكم بصلاحياتهم")
+    guide("admin")
+
+    # ── Current employees table ──
+    st.markdown('<div class="sec-title">الفريق الحالي</div>', unsafe_allow_html=True)
+    rows = qall("SELECT id, full_name, username, email, role, is_active, created_at FROM users ORDER BY id")
+    if rows:
+        df = pd.DataFrame(rows)
+        df["is_active"] = df["is_active"].map({1: "✅ نشط", 0: "🚫 موقوف"})
+        st.dataframe(df.rename(columns={
+            "id":"#","full_name":"الاسم الكامل","username":"اسم المستخدم",
+            "email":"الإيميل","role":"القسم","is_active":"الحالة","created_at":"تاريخ الإضافة"
+        }), use_container_width=True, hide_index=True)
+    st.markdown("---")
+
+    # ── Add new employee ──
+    st.markdown('<div class="sec-title">➕ إضافة موظف جديد</div>', unsafe_allow_html=True)
+
+    with st.form("add_emp", clear_on_submit=True):
+        c1, c2 = st.columns(2)
+        full_name = c1.text_input("الاسم الكامل *", placeholder="محمد أحمد")
+        username  = c2.text_input("اسم المستخدم *", placeholder="mohammed_a")
+
+        c3, c4 = st.columns(2)
+        email = c3.text_input("الإيميل *", placeholder="mohammed@company.com")
+        dept  = c4.selectbox(
+            "القسم / الدور *",
+            ["sales", "design", "production", "agent"],
+            format_func=lambda r: f"{ROLES[r]['icon']}  {ROLES[r]['label']}",
+        )
+
+        c5, c6 = st.columns(2)
+        pw1 = c5.text_input("كلمة المرور *", type="password")
+        pw2 = c6.text_input("تأكيد كلمة المرور *", type="password")
+
+        submitted = st.form_submit_button("✅ إضافة الموظف", use_container_width=True)
+
+    if submitted:
+        errors = []
+        if not all([full_name, username, email, pw1]):
+            errors.append("يرجى تعبئة جميع الحقول المطلوبة.")
+        if pw1 and pw2 and pw1 != pw2:
+            errors.append("كلمتا المرور غير متطابقتين.")
+        if pw1 and len(pw1) < 6:
+            errors.append("كلمة المرور يجب أن تكون 6 أحرف على الأقل.")
+        if errors:
+            for e in errors:
+                st.error(e)
+        else:
+            try:
+                qrun(
+                    "INSERT INTO users (full_name, username, email, password, role) VALUES (?,?,?,?,?)",
+                    (full_name.strip(), username.strip().lower(),
+                     email.strip().lower(), _hash(pw1), dept)
+                )
+                st.success(f"✅ تم إضافة الموظف **{full_name}** بنجاح! يمكنه الدخول بـ «{username.strip().lower()}» أو إيميله.")
+                st.rerun()
+            except sqlite3.IntegrityError as ex:
+                if "username" in str(ex):
+                    st.error("❌ اسم المستخدم مستخدم بالفعل.")
+                elif "email" in str(ex):
+                    st.error("❌ الإيميل مسجّل بالفعل.")
+                else:
+                    st.error(f"❌ خطأ: {ex}")
+
+    st.markdown("---")
+
+    # ── Toggle active/inactive ──
+    st.markdown('<div class="sec-title">🔄 تفعيل / تعطيل موظف</div>', unsafe_allow_html=True)
+    all_users = qall("SELECT id, full_name, username, is_active FROM users WHERE role != 'admin' ORDER BY id")
+    if all_users:
+        options = {f"{u['id']} — {u['full_name']} ({u['username']})": u["id"] for u in all_users}
+        sel_label = st.selectbox("اختر الموظف", list(options.keys()))
+        sel_uid   = options[sel_label]
+        sel_user  = next(u for u in all_users if u["id"] == sel_uid)
+
+        col1, col2, _ = st.columns([1, 1, 2])
+        if col1.button("✅ تفعيل", key="act_btn"):
+            qrun("UPDATE users SET is_active=1 WHERE id=?", (sel_uid,))
+            st.success("تم تفعيل الحساب.")
+            st.rerun()
+        if col2.button("🚫 تعطيل", key="deact_btn"):
+            qrun("UPDATE users SET is_active=0 WHERE id=?", (sel_uid,))
+            st.warning("تم تعطيل الحساب.")
+            st.rerun()
+    else:
+        st.info("لا يوجد موظفون مضافون بعد.")
+
+
+# ── SALES: Dashboard ──────────────────────────────────────────────────────────
+def pg_sales_dash():
+    page_hdr("📊", "لوحتي", "نظرة سريعة على أوردراتك")
+    guide("sales")
+    uid    = st.session_state["uid"]
+    total  = (qone("SELECT COUNT(*) c FROM orders WHERE created_by_id=?", (uid,)) or {}).get("c", 0)
+    done   = (qone("SELECT COUNT(*) c FROM orders WHERE created_by_id=? AND production_status='Done'", (uid,)) or {}).get("c", 0)
+    rev    = (qone("SELECT COALESCE(SUM(price),0) s FROM orders WHERE created_by_id=? AND production_status='Done'", (uid,)) or {}).get("s", 0)
+    pending= (qone("SELECT COUNT(*) c FROM orders WHERE created_by_id=? AND status='New'", (uid,)) or {}).get("c", 0)
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("إجمالي أوردراتي", total)
+    c2.metric("مكتملة",          done)
+    c3.metric("إيراداتي (د.ع)",  f"{rev:,.0f}")
+    c4.metric("جديدة / قيد التنفيذ", pending)
+
+    st.markdown("---")
+    st.markdown("**آخر أوردراتي**")
+    orders_table("sales", uid_filter=uid)
+
+
+# ── SALES: Add Order ──────────────────────────────────────────────────────────
+def pg_add_order():
+    page_hdr("➕", "أوردر جديد", "أدخل تفاصيل طلب العميل بدقة")
+    guide("sales")
+
+    with st.form("new_order", clear_on_submit=True):
         c1, c2 = st.columns(2)
         customer    = c1.text_input("👤 اسم العميل *")
         quantity    = c2.number_input("📦 الكمية *", min_value=1, value=1)
-        description = st.text_area("📝 وصف الطلب *", placeholder="تفاصيل الطباعة، المقاس، الورق...")
+        description = st.text_area("📝 وصف الطلب *", placeholder="تفاصيل الطباعة: المقاس، الورق، نوع الطباعة...")
         c3, _ = st.columns(2)
-        price  = c3.number_input("💰 السعر (د.ع) *", min_value=0.0, step=500.0)
-        sub    = st.form_submit_button("✅ حفظ الأوردر")
+        price = c3.number_input("💰 السعر (د.ع) *", min_value=0.0, step=500.0, value=0.0)
+        sub   = st.form_submit_button("✅ حفظ الأوردر", use_container_width=True)
+
     if sub:
-        if not customer or not description or price <= 0:
-            st.error("يرجى تعبئة جميع الحقول.")
+        if not customer.strip() or not description.strip() or price <= 0:
+            st.error("يرجى تعبئة جميع الحقول بشكل صحيح — السعر يجب أن يكون أكبر من صفر.")
         else:
-            ono = gen_order_no()
-            db_execute(
-                """INSERT INTO orders(order_number,customer_name,description,quantity,price,
-                   created_by_id,created_by_name) VALUES(?,?,?,?,?,?,?)""",
+            ono = new_order_no()
+            qrun(
+                """INSERT INTO orders
+                   (order_number, customer_name, description, quantity, price,
+                    created_by_id, created_by_name)
+                   VALUES (?,?,?,?,?,?,?)""",
                 (ono, customer.strip(), description.strip(), quantity, price,
                  st.session_state["uid"], st.session_state["uname"])
             )
-            st.success(f"✅ تم إضافة الأوردر **{ono}** بنجاح!")
+            st.success(f"✅ تم حفظ الأوردر برقم **{ono}** — سيظهر لقسم التصميم والمشتريات فوراً!")
 
 
-def page_design_tasks():
-    page_header("🎨", "مهام التصميم", "رفع التصاميم وتحديث الحالة")
-    guide_box("design")
+# ── DESIGN: Tasks ─────────────────────────────────────────────────────────────
+def pg_design():
+    page_hdr("🎨", "مهام التصميم", "راجع الأوردرات وارفع ملفات التصميم")
+    guide("design")
 
-    rows    = db_fetchall("SELECT * FROM orders ORDER BY id DESC")
+    rows    = qall("SELECT * FROM orders ORDER BY id DESC")
     pending = [r for r in rows if r["design_status"] == "Pending"]
     done    = [r for r in rows if r["design_status"] == "Done"]
 
-    tab1, tab2 = st.tabs([f"⏳ قيد الانتظار ({len(pending)})", f"✅ مكتملة ({len(done)})"])
+    tab1, tab2 = st.tabs([
+        f"⏳ قيد الانتظار  ({len(pending)})",
+        f"✅ مكتملة  ({len(done)})",
+    ])
 
     with tab1:
         if not pending:
-            st.success("🎉 لا توجد مهام تصميم معلقة!")
+            st.success("🎉 لا توجد مهام تصميم معلقة! أحسنت.")
         for r in pending:
-            with st.expander(f"🔷 {r['order_number']} — {r['customer_name']}"):
+            with st.expander(f"🔷 {r['order_number']}  —  {r['customer_name']}"):
                 c1, c2 = st.columns(2)
                 c1.markdown(f"**الوصف:** {r['description']}")
                 c1.markdown(f"**الكمية:** {r['quantity']}")
-                c2.markdown(f"**التاريخ:** {r['created_at']}")
-                c2.markdown(f"**بواسطة:** {r['created_by_name']}")
+                c2.markdown(f"**وقت الإنشاء:** {r['created_at']}")
+                c2.markdown(f"**أضافه:** {r['created_by_name']}")
                 st.markdown("---")
-                dl   = st.text_input("🔗 رابط التصميم", value=r["design_link"] or "", key=f"dl_{r['id']}")
-                upld = st.file_uploader("📎 رفع ملف التصميم", key=f"du_{r['id']}",
-                                         type=["pdf","png","jpg","ai","psd","svg","eps"])
-                notes= st.text_area("📝 ملاحظات", value=r["design_notes"] or "", key=f"dn_{r['id']}", height=70)
-                if st.button("✅ تحديث → Design Done", key=f"dbtn_{r['id']}"):
-                    fp = save_upload(upld, "designs") if upld else (r["design_file_path"] or "")
+                dl    = st.text_input("🔗 رابط التصميم (اختياري)", value=r["design_link"] or "", key=f"dl_{r['id']}")
+                upld  = st.file_uploader("📎 رفع ملف التصميم", key=f"du_{r['id']}",
+                                          type=["pdf","png","jpg","jpeg","ai","psd","svg","eps","zip"])
+                notes = st.text_area("📝 ملاحظات", value=r["design_notes"] or "", key=f"dn_{r['id']}", height=70)
+
+                if st.button("✅ تحديث → Design Done", key=f"d_done_{r['id']}"):
+                    fp = save_file(upld, "designs") if upld else (r["design_file_path"] or "")
                     if not dl.strip() and not fp:
-                        st.error("يرجى رفع ملف أو إدخال رابط التصميم.")
+                        st.error("يرجى رفع ملف التصميم أو إدخال رابطه قبل التأكيد.")
                     else:
                         now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-                        db_execute("""UPDATE orders SET design_status='Done',design_link=?,
-                            design_file_path=?,design_notes=?,design_updated=?,design_by=? WHERE id=?""",
-                            (dl.strip(), fp, notes.strip(), now, st.session_state["uname"], r["id"]))
-                        update_order_status(r["id"])
-                        st.success("✅ تم تحديث التصميم!")
+                        qrun("""
+                            UPDATE orders
+                            SET design_status='Done', design_link=?, design_file_path=?,
+                                design_notes=?, design_updated=?, design_by=?
+                            WHERE id=?
+                        """, (dl.strip(), fp, notes.strip(), now, st.session_state["uname"], r["id"]))
+                        refresh_order_status(r["id"])
+                        st.success("✅ تم تحديث التصميم بنجاح!")
                         st.rerun()
 
     with tab2:
         if not done:
-            st.info("لا توجد تصاميم مكتملة.")
+            st.info("لا توجد تصاميم مكتملة بعد.")
         for r in done:
             st.markdown(
-                f'<div class="card"><b>{r["order_number"]}</b> — {r["customer_name"]}'
-                f'&nbsp;{badge("Design Done")}'
-                f'<br><small style="color:var(--t3)">🔗 {r["design_link"] or "—"}'
-                f' &nbsp;|&nbsp; 🗓 {r["design_updated"]}</small></div>',
-                unsafe_allow_html=True)
+                f'<div class="card">'
+                f'  <b>{r["order_number"]}</b> — {r["customer_name"]}'
+                f'  &nbsp;{mk_badge("Design Done")}'
+                f'  <br><small style="color:var(--t3)">'
+                f'    🔗 {r["design_link"] or "—"} &nbsp;|&nbsp; 🗓 {r["design_updated"]}'
+                f'  </small>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
             if r.get("design_file_path"):
-                download_btn(r["design_file_path"], "⬇️ تحميل ملف التصميم")
+                dl_button(r["design_file_path"], "⬇️ تحميل ملف التصميم")
 
 
-def page_purchase():
-    page_header("📦", "متابعة المواد", "تأكيد توفر مواد الأوردرات")
-    guide_box("purchase")
+# ── PRODUCTION: Tasks ─────────────────────────────────────────────────────────
+def pg_production():
+    page_hdr("🖨️", "الإنتاج والطباعة", "فقط الأوردرات الجاهزة (تصميم ✅ + مشتريات ✅)")
+    guide("production")
 
-    rows    = db_fetchall("SELECT * FROM orders ORDER BY id DESC")
-    pending = [r for r in rows if r["purchase_status"] == "Pending"]
-    ready   = [r for r in rows if r["purchase_status"] == "Ready"]
-
-    tab1, tab2 = st.tabs([f"⏳ قيد التوفير ({len(pending)})", f"✅ جاهزة ({len(ready)})"])
-
-    with tab1:
-        if not pending:
-            st.success("🎉 جميع المواد جاهزة!")
-        for r in pending:
-            with st.expander(f"📦 {r['order_number']} — {r['customer_name']}"):
-                c1, c2 = st.columns(2)
-                c1.markdown(f"**الوصف:** {r['description']}")
-                c1.markdown(f"**الكمية:** {r['quantity']}")
-                c2.markdown(f"**حالة التصميم:** {r['design_status']}")
-                notes = st.text_area("📝 ملاحظات", value=r["purchase_notes"] or "",
-                                     key=f"pn_{r['id']}", height=70)
-                if st.button("✅ تأكيد توفر المواد", key=f"pbtn_{r['id']}"):
-                    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-                    db_execute("UPDATE orders SET purchase_status='Ready',purchase_notes=?,purchase_updated=? WHERE id=?",
-                               (notes.strip(), now, r["id"]))
-                    update_order_status(r["id"])
-                    st.success("✅ تم تأكيد المواد!")
-                    st.rerun()
-
-    with tab2:
-        if not ready:
-            st.info("لا توجد مواد جاهزة بعد.")
-        for r in ready:
-            st.markdown(
-                f'<div class="card"><b>{r["order_number"]}</b> — {r["customer_name"]}'
-                f'&nbsp;{badge("Materials Ready")}'
-                f'<br><small style="color:var(--t3)">🗓 {r["purchase_updated"]}</small></div>',
-                unsafe_allow_html=True)
-
-
-def page_production():
-    page_header("🖨️", "الإنتاج والطباعة", "تنفيذ الأوردرات الجاهزة فقط")
-    guide_box("production")
-
-    rows      = db_fetchall("SELECT * FROM orders ORDER BY id DESC")
-    available = [r for r in rows if r["design_status"]=="Done" and r["purchase_status"]=="Ready" and r["production_status"]!="Done"]
-    printing  = [r for r in rows if r["production_status"]=="Printing"]
-    completed = [r for r in rows if r["production_status"]=="Done"]
+    rows      = qall("SELECT * FROM orders ORDER BY id DESC")
+    available = [r for r in rows
+                 if r["design_status"]    == "Done"
+                 and r["purchase_status"] == "Ready"
+                 and r["production_status"] != "Done"]
+    printing  = [r for r in rows if r["production_status"] == "Printing"]
+    completed = [r for r in rows if r["production_status"] == "Done"]
     with_file = [r for r in rows if r.get("design_file_path")]
 
     tab1, tab2, tab3, tab4 = st.tabs([
-        f"🟢 جاهز ({len(available)})",
-        f"🟠 طباعة ({len(printing)})",
-        f"✅ مكتمل ({len(completed)})",
-        f"📁 الملفات ({len(with_file)})",
+        f"🟢 جاهز للطباعة  ({len(available)})",
+        f"🟠 تحت الطباعة  ({len(printing)})",
+        f"✅ مكتمل  ({len(completed)})",
+        f"📁 ملفات التصميم  ({len(with_file)})",
     ])
 
     with tab1:
         if not available:
-            st.info("⏳ لا توجد أوردرات جاهزة. انتظر إتمام التصميم والمواد.")
+            st.info("⏳ لا توجد أوردرات جاهزة. انتظر إتمام التصميم وتأكيد المشتريات.")
         for r in available:
-            with st.expander(f"🟢 {r['order_number']} — {r['customer_name']}"):
+            with st.expander(f"🟢 {r['order_number']}  —  {r['customer_name']}"):
                 c1, c2 = st.columns(2)
                 c1.markdown(f"**الوصف:** {r['description']}")
                 c1.markdown(f"**الكمية:** {r['quantity']}")
                 c2.markdown(f"**رابط التصميم:** {r['design_link'] or '—'}")
                 if r.get("design_file_path"):
-                    download_btn(r["design_file_path"], "⬇️ تحميل ملف التصميم")
-                notes = st.text_area("📝 ملاحظات", key=f"pron_{r['id']}", height=60)
+                    dl_button(r["design_file_path"], "⬇️ تحميل ملف التصميم")
+                notes = st.text_area("📝 ملاحظات الإنتاج", key=f"pn_{r['id']}", height=60)
                 col1, col2 = st.columns(2)
                 if col1.button("▶️ بدء الطباعة", key=f"start_{r['id']}"):
                     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-                    db_execute("UPDATE orders SET production_status='Printing',production_notes=?,production_updated=? WHERE id=?",
-                               (notes, now, r["id"]))
-                    update_order_status(r["id"])
+                    qrun("UPDATE orders SET production_status='Printing', production_notes=?, production_updated=? WHERE id=?",
+                         (notes, now, r["id"]))
+                    refresh_order_status(r["id"])
                     st.success("▶️ بدأت الطباعة!")
                     st.rerun()
                 if col2.button("✅ إتمام مباشر", key=f"fin2_{r['id']}"):
                     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-                    db_execute("UPDATE orders SET production_status='Done',production_notes=?,production_updated=? WHERE id=?",
-                               (notes, now, r["id"]))
-                    update_order_status(r["id"])
-                    st.success("✅ اكتمل!")
+                    qrun("UPDATE orders SET production_status='Done', production_notes=?, production_updated=? WHERE id=?",
+                         (notes, now, r["id"]))
+                    refresh_order_status(r["id"])
+                    st.success("✅ اكتمل الأوردر!")
                     st.rerun()
 
     with tab2:
         if not printing:
-            st.info("لا توجد طباعة جارية.")
+            st.info("لا توجد طباعة جارية الآن.")
         for r in printing:
-            with st.expander(f"🟠 {r['order_number']} — {r['customer_name']}"):
+            with st.expander(f"🟠 {r['order_number']}  —  {r['customer_name']}"):
                 c1, c2 = st.columns(2)
                 c1.markdown(f"**الوصف:** {r['description']}")
                 c2.markdown(f"**الكمية:** {r['quantity']}")
                 if r.get("design_file_path"):
-                    download_btn(r["design_file_path"])
+                    dl_button(r["design_file_path"])
                 if st.button("✅ تحديد كـ مكتمل", key=f"fin_{r['id']}"):
                     now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-                    db_execute("UPDATE orders SET production_status='Done',production_updated=? WHERE id=?", (now, r["id"]))
-                    update_order_status(r["id"])
+                    qrun("UPDATE orders SET production_status='Done', production_updated=? WHERE id=?", (now, r["id"]))
+                    refresh_order_status(r["id"])
                     st.success("✅ اكتمل!")
                     st.rerun()
 
@@ -967,91 +1321,112 @@ def page_production():
             st.info("لا توجد أوردرات مكتملة بعد.")
         for r in completed:
             st.markdown(
-                f'<div class="card"><b>{r["order_number"]}</b> — {r["customer_name"]}'
-                f'&nbsp;{badge("Completed")}'
-                f'<br><small style="color:var(--t3)">اكتمل: {r["production_updated"]}</small></div>',
-                unsafe_allow_html=True)
+                f'<div class="card">'
+                f'  <b>{r["order_number"]}</b> — {r["customer_name"]}'
+                f'  &nbsp;{mk_badge("Completed")}'
+                f'  <br><small style="color:var(--t3)">اكتمل: {r["production_updated"]}</small>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
 
     with tab4:
         if not with_file:
             st.info("لا توجد ملفات مرفوعة.")
+        st.markdown("**جميع ملفات التصميم المتوفرة:**")
         for r in with_file:
-            c1, c2 = st.columns([3,1])
+            c1, c2 = st.columns([3, 1])
             c1.markdown(f"**{r['order_number']}** — {r['customer_name']}")
             with c2:
-                download_btn(r["design_file_path"], "⬇️")
+                dl_button(r["design_file_path"], "⬇️")
 
 
-def page_agent_new_visit():
-    page_header("🗺️", "تسجيل زيارة عميل", "سجّل بيانات الزيارة الميدانية")
-    guide_box("agent")
-    with st.form("agent_visit", clear_on_submit=True):
+# ── AGENT: Register Visit ─────────────────────────────────────────────────────
+def pg_agent_visit():
+    page_hdr("🗺️", "تسجيل زيارة عميل", "وثّق زيارتك الميدانية مع كل التفاصيل")
+    guide("agent")
+
+    with st.form("visit_form", clear_on_submit=True):
         customer = st.text_input("👤 اسم العميل / المحل *")
-        location = st.text_input("📍 الموقع (العنوان)", placeholder="مثال: شارع المتنبي، بغداد")
-        c1, c2  = st.columns(2)
-        lat      = c1.number_input("خط العرض (Lat)", value=33.3406, format="%.6f")
-        lng      = c2.number_input("خط الطول (Lng)", value=44.4009, format="%.6f")
-        vstatus  = st.selectbox("📊 حالة العميل",
-                                 ["potential","bought","no"],
-                                 format_func=lambda s: {"bought":"✅ اشترى","potential":"🔵 محتمل","no":"❌ لن يشتري"}[s])
-        notes    = st.text_area("📝 ملاحظات", height=80)
-        image    = st.file_uploader("📸 صورة المحل (اختياري)", type=["jpg","jpeg","png","webp"])
-        sub      = st.form_submit_button("✅ حفظ الزيارة")
+        location = st.text_input("📍 العنوان / الموقع", placeholder="مثال: شارع المتنبي، بغداد")
+        c1, c2   = st.columns(2)
+        lat = c1.number_input("خط العرض (Lat)", value=33.3406, format="%.6f")
+        lng = c2.number_input("خط الطول (Lng)", value=44.4009, format="%.6f")
+        vs  = st.selectbox("📊 حالة العميل",
+                            ["potential","bought","no"],
+                            format_func=lambda s: {"bought":"✅ اشترى","potential":"🔵 محتمل","no":"❌ لن يشتري"}[s])
+        notes = st.text_area("📝 ملاحظات الزيارة", height=80)
+        image = st.file_uploader("📸 صورة المحل (اختياري)", type=["jpg","jpeg","png","webp"])
+        sub   = st.form_submit_button("✅ حفظ الزيارة", use_container_width=True)
+
     if sub:
-        if not customer:
+        if not customer.strip():
             st.error("يرجى إدخال اسم العميل.")
         else:
-            ip = save_upload(image, "agent_images") if image else ""
-            db_execute("""INSERT INTO agent_visits(agent_id,agent_name,customer_name,
-                location_text,lat,lng,status,notes,image_path) VALUES(?,?,?,?,?,?,?,?,?)""",
-                (st.session_state["uid"], st.session_state["uname"],
-                 customer.strip(), location.strip(), lat, lng, vstatus, notes.strip(), ip))
-            st.success(f"✅ تم تسجيل الزيارة للعميل **{customer}**!")
+            ip = save_file(image, "agent_imgs") if image else ""
+            qrun("""
+                INSERT INTO agent_visits
+                    (agent_id, agent_name, customer_name, location_text, lat, lng, status, notes, image_path)
+                VALUES (?,?,?,?,?,?,?,?,?)
+            """, (st.session_state["uid"], st.session_state["uname"],
+                  customer.strip(), location.strip(), lat, lng, vs, notes.strip(), ip))
+            st.success(f"✅ تم تسجيل الزيارة للعميل **{customer.strip()}** بنجاح!")
 
 
-def page_agent_visits():
-    page_header("📋", "زياراتي", "سجل زياراتك الميدانية")
+# ── AGENT: My Visits ──────────────────────────────────────────────────────────
+def pg_agent_my_visits():
+    page_hdr("📋", "زياراتي", "سجل زياراتك الميدانية")
     uid  = st.session_state["uid"]
-    rows = db_fetchall("SELECT * FROM agent_visits WHERE agent_id=? ORDER BY id DESC", (uid,))
+    rows = qall("SELECT * FROM agent_visits WHERE agent_id=? ORDER BY id DESC", (uid,))
     if not rows:
-        st.info("لم تسجّل أي زيارة بعد.")
+        st.info("لم تسجّل أي زيارة بعد. ابدأ بتسجيل أول زيارة!")
         return
+
     for r in rows:
-        cls, lbl = AGENT_STATUS_MAP.get(r["status"], ("b-new", r["status"]))
+        cls, lbl = AGENT_BADGES.get(r["status"], ("b-apot", r["status"]))
         img_html = ""
         if r.get("image_path") and Path(r["image_path"]).exists():
-            img_data = base64.b64encode(Path(r["image_path"]).read_bytes()).decode()
-            ext = Path(r["image_path"]).suffix.lstrip(".") or "jpeg"
-            img_html = f'<br><img src="data:image/{ext};base64,{img_data}" style="max-width:220px;border-radius:8px;margin-top:.5rem">'
+            raw  = Path(r["image_path"]).read_bytes()
+            b64  = base64.b64encode(raw).decode()
+            ext  = Path(r["image_path"]).suffix.lstrip(".") or "jpeg"
+            img_html = (
+                f'<br><img src="data:image/{ext};base64,{b64}" '
+                f'style="max-width:220px;max-height:180px;border-radius:8px;'
+                f'margin-top:.5rem;object-fit:cover">'
+            )
         st.markdown(
             f'<div class="card">'
-            f'<b>{r["customer_name"]}</b>&nbsp;<span class="badge {cls}">{lbl}</span>'
-            f'<br><small style="color:var(--t2)">📍 {r["location_text"] or "—"}&nbsp;|&nbsp;🗓 {r["visited_at"]}</small>'
-            f'{"<br><small>"+r["notes"]+"</small>" if r["notes"] else ""}'
-            f'{img_html}</div>', unsafe_allow_html=True)
+            f'  <b>{r["customer_name"]}</b>&nbsp;<span class="badge {cls}">{lbl}</span>'
+            f'  <br><small style="color:var(--t2)">📍 {r["location_text"] or "—"}&nbsp;|&nbsp;🗓 {r["visited_at"]}</small>'
+            f'  {"<br><small style=color:var(--t2)>"+r["notes"]+"</small>" if r["notes"] else ""}'
+            f'  {img_html}'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
 
 
-def page_agent_report():
-    page_header("🗺️", "تقارير المندوبين", "إحصائيات الزيارات الميدانية")
-    rows = db_fetchall("""
-        SELECT agent_name,COUNT(*) visits,
+# ── AGENT REPORTS (admin view) ────────────────────────────────────────────────
+def pg_agent_reports():
+    page_hdr("🗺️", "تقارير المندوبين", "أداء وزيارات فريق المبيعات الميداني")
+    rows = qall("""
+        SELECT agent_name,
+               COUNT(*) visits,
                SUM(CASE WHEN status='bought'    THEN 1 ELSE 0 END) bought,
                SUM(CASE WHEN status='potential' THEN 1 ELSE 0 END) potential,
                SUM(CASE WHEN status='no'        THEN 1 ELSE 0 END) lost,
                MAX(visited_at) last_visit
         FROM agent_visits GROUP BY agent_id ORDER BY visits DESC
     """)
-    if not rows:
-        st.info("لا توجد زيارات بعد.")
-    else:
+    if rows:
         st.dataframe(pd.DataFrame(rows).rename(columns={
             "agent_name":"المندوب","visits":"الزيارات","bought":"اشترى",
             "potential":"محتمل","lost":"لن يشتري","last_visit":"آخر زيارة"
         }), use_container_width=True, hide_index=True)
+    else:
+        st.info("لا توجد زيارات بعد.")
 
     st.markdown("---")
-    st.markdown("**كل الزيارات**")
-    all_v = db_fetchall("SELECT agent_name,customer_name,location_text,status,notes,visited_at FROM agent_visits ORDER BY id DESC")
+    st.markdown("**📋 جميع الزيارات**")
+    all_v = qall("SELECT agent_name,customer_name,location_text,status,notes,visited_at FROM agent_visits ORDER BY id DESC")
     if all_v:
         st.dataframe(pd.DataFrame(all_v).rename(columns={
             "agent_name":"المندوب","customer_name":"العميل","location_text":"الموقع",
@@ -1059,30 +1434,34 @@ def page_agent_report():
         }), use_container_width=True, hide_index=True)
 
 
-def page_submit_incident():
+# ── INCIDENT REPORT (submit) ──────────────────────────────────────────────────
+def pg_submit_incident():
     role = st.session_state["role"]
-    page_header("🚨", "بلاغ خلل أو نقص", "أبلغ عن أي عطل أو نقص في القسم")
-    with st.form("incident", clear_on_submit=True):
+    page_hdr("🚨", "بلاغ خلل أو نقص", "أبلغ المدير عن أي مشكلة في القسم")
+
+    with st.form("incident_form", clear_on_submit=True):
         desc = st.text_area("📝 وصف المشكلة *",
-                             placeholder="مثال: نقص حبر الطباعة، عطل في الطابعة رقم 2، نقص ورق A4...")
+                             placeholder="مثال: نقص حبر أسود، عطل في الطابعة رقم 2، انقطاع كهرباء...")
         sev  = st.selectbox("⚠️ درجة الخطورة",
                              ["low","medium","high"],
                              format_func=lambda s: {"low":"🟢 منخفض","medium":"🟡 متوسط","high":"🔴 عالي"}[s])
-        sub  = st.form_submit_button("📤 إرسال البلاغ")
+        sub  = st.form_submit_button("📤 إرسال البلاغ للمدير", use_container_width=True)
+
     if sub:
         if not desc.strip():
             st.error("يرجى كتابة وصف المشكلة.")
         else:
-            db_execute("""INSERT INTO incident_reports(reporter_id,reporter_name,department,description,severity)
-                VALUES(?,?,?,?,?)""",
-                (st.session_state["uid"], st.session_state["uname"],
-                 ROLES[role]["label"], desc.strip(), sev))
-            st.success("✅ تم إرسال البلاغ! سيراجعه المدير قريباً.")
+            qrun("""
+                INSERT INTO incident_reports (reporter_id, reporter_name, department, description, severity)
+                VALUES (?,?,?,?,?)
+            """, (st.session_state["uid"], st.session_state["uname"],
+                  ROLES[role]["label"], desc.strip(), sev))
+            st.success("✅ تم إرسال البلاغ بنجاح! سيتابعه المدير العام.")
 
     st.markdown("---")
-    st.markdown("**بلاغاتك السابقة**")
-    rows = db_fetchall(
-        "SELECT description,severity,status,created_at FROM incident_reports "
+    st.markdown("**📋 بلاغاتي السابقة**")
+    rows = qall(
+        "SELECT description, severity, status, created_at FROM incident_reports "
         "WHERE reporter_id=? ORDER BY id DESC LIMIT 10",
         (st.session_state["uid"],)
     )
@@ -1094,187 +1473,213 @@ def page_submit_incident():
         st.info("لا توجد بلاغات سابقة.")
 
 
-def page_all_incidents():
-    page_header("🚨", "بلاغات الأعطال", "جميع البلاغات الواردة")
-    rows = db_fetchall("SELECT * FROM incident_reports ORDER BY id DESC")
+# ── INCIDENT REPORTS (admin view) ────────────────────────────────────────────
+def pg_all_incidents():
+    page_hdr("🚨", "بلاغات الأعطال", "جميع البلاغات الواردة من أقسام المطبعة")
+    rows = qall("SELECT * FROM incident_reports ORDER BY id DESC")
     if not rows:
-        st.success("🎉 لا توجد بلاغات مفتوحة!")
+        st.success("🎉 لا توجد بلاغات مفتوحة! كل شيء يعمل بسلاسة.")
         return
 
-    open_r    = [r for r in rows if r["status"] == "open"]
-    resolved  = [r for r in rows if r["status"] == "resolved"]
-    tab1, tab2 = st.tabs([f"🔴 مفتوحة ({len(open_r)})", f"✅ محلولة ({len(resolved)})"])
+    open_r   = [r for r in rows if r["status"] == "open"]
+    resolved = [r for r in rows if r["status"] == "resolved"]
+
+    tab1, tab2 = st.tabs([f"🔴 مفتوحة  ({len(open_r)})", f"✅ محلولة  ({len(resolved)})"])
 
     for tab, flist in [(tab1, open_r), (tab2, resolved)]:
         with tab:
             if not flist:
                 st.info("لا توجد بلاغات في هذه الفئة.")
             for r in flist:
-                sev_cls, sev_lbl = SEV_MAP.get(r["severity"], ("b-new", r["severity"]))
-                with st.expander(f"{sev_lbl} — {r['department']} — {r['created_at'][:16]}"):
+                sev_cls, sev_lbl = SEV_BADGES.get(r["severity"], ("b-sev-md", r["severity"]))
+                with st.expander(f'{sev_lbl}  —  {r["department"]}  —  {r["created_at"][:16]}'):
                     st.markdown(f"**المبلّغ:** {r['reporter_name']}")
+                    st.markdown(f"**القسم:** {r['department']}")
                     st.markdown(f"**الوصف:** {r['description']}")
                     if r["status"] == "open":
                         if st.button("✅ تحديد كـ محلول", key=f"res_{r['id']}"):
                             now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
-                            db_execute("UPDATE incident_reports SET status='resolved',resolved_at=? WHERE id=?",
-                                       (now, r["id"]))
-                            st.success("تم تحديث البلاغ.")
+                            qrun("UPDATE incident_reports SET status='resolved', resolved_at=? WHERE id=?",
+                                 (now, r["id"]))
+                            st.success("تم تحديث البلاغ كمحلول.")
                             st.rerun()
+                    else:
+                        st.caption(f"تم الحل: {r['resolved_at']}")
 
 
-def page_financial():
-    page_header("💰", "التقارير المالية", "ملخص مالي — للمبيعات والمدير فقط")
-    total_v = (db_fetchone("SELECT COALESCE(SUM(price),0) s FROM orders") or {}).get("s", 0)
-    rev     = (db_fetchone("SELECT COALESCE(SUM(price),0) s FROM orders WHERE production_status='Done'") or {}).get("s", 0)
-    count   = (db_fetchone("SELECT COUNT(*) c FROM orders") or {}).get("c", 0)
-    avg     = (total_v / count) if count else 0
+# ── FINANCIAL REPORTS (admin + sales) ────────────────────────────────────────
+def pg_financial():
+    page_hdr("💰", "التقارير المالية", "ملخص مالي شامل — للمبيعات والمدير فقط")
 
-    c1,c2,c3,c4 = st.columns(4)
-    c1.metric("إجمالي قيمة الأوردرات", f"{total_v:,.0f} د.ع")
-    c2.metric("إيرادات المكتملة",       f"{rev:,.0f} د.ع")
-    c3.metric("قيد التنفيذ",            f"{total_v-rev:,.0f} د.ع")
-    c4.metric("متوسط قيمة الأوردر",     f"{avg:,.0f} د.ع")
+    total_v  = (qone("SELECT COALESCE(SUM(price),0) s FROM orders") or {}).get("s", 0)
+    rev      = (qone("SELECT COALESCE(SUM(price),0) s FROM orders WHERE production_status='Done'") or {}).get("s", 0)
+    count    = (qone("SELECT COUNT(*) c FROM orders") or {}).get("c", 0)
+    avg      = (total_v / count) if count else 0
+    pending  = total_v - rev
 
-    st.markdown("---")
-    rows = db_fetchall("SELECT order_number,customer_name,quantity,price,status,created_at FROM orders ORDER BY id DESC")
-    if rows:
-        df = pd.DataFrame(rows)
-        st.dataframe(df.rename(columns={
-            "order_number":"رقم الأوردر","customer_name":"العميل",
-            "quantity":"الكمية","price":"السعر (د.ع)",
-            "status":"الحالة","created_at":"التاريخ"
-        }), use_container_width=True, hide_index=True)
-
-        header_txt = (
-            f"Z-Order — تقرير مالي\n"
-            f"Developed by: {DEVELOPER}\n"
-            f"تاريخ الاستخراج: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n"
-        )
-        csv = (header_txt + df.to_csv(index=False)).encode("utf-8-sig")
-        st.download_button("⬇️ تصدير CSV", csv,
-                           file_name=f"z_order_report_{datetime.date.today()}.csv",
-                           mime="text/csv", use_container_width=True)
-
-
-def page_user_management():
-    page_header("👥", "إدارة المستخدمين", "عرض الحسابات وإضافة موظفين جدد")
-    rows = db_fetchall("SELECT id,full_name,email,role,is_active,created_at FROM users ORDER BY id")
-    st.dataframe(pd.DataFrame(rows).rename(columns={
-        "id":"#","full_name":"الاسم","email":"الإيميل",
-        "role":"الدور","is_active":"نشط","created_at":"تاريخ الإنشاء"
-    }), use_container_width=True, hide_index=True)
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("إجمالي قيمة الأوردرات",  f"{total_v:,.0f} د.ع")
+    c2.metric("إيرادات الأوردرات المكتملة", f"{rev:,.0f} د.ع")
+    c3.metric("قيد التنفيذ (غير محصلة)", f"{pending:,.0f} د.ع")
+    c4.metric("متوسط قيمة الأوردر",      f"{avg:,.0f} د.ع")
 
     st.markdown("---")
-    st.markdown("**➕ إضافة مستخدم جديد**")
-    with st.form("add_user", clear_on_submit=True):
-        c1, c2 = st.columns(2)
-        name  = c1.text_input("الاسم الكامل")
-        email = c2.text_input("الإيميل")
-        c3, c4 = st.columns(2)
-        role  = c3.selectbox("الدور", list(ROLES.keys()),
-                              format_func=lambda r: f"{ROLES[r]['icon']} {ROLES[r]['label']}")
-        pw    = c4.text_input("كلمة المرور", type="password")
-        sub   = st.form_submit_button("إضافة")
-    if sub:
-        if not all([name, email, pw]):
-            st.error("يرجى تعبئة جميع الحقول.")
-        else:
-            try:
-                db_execute("INSERT INTO users(full_name,email,password,role) VALUES(?,?,?,?)",
-                           (name.strip(), email.strip().lower(), hash_pw(pw), role))
-                st.success(f"✅ تم إضافة '{name}'.")
-                st.rerun()
-            except sqlite3.IntegrityError:
-                st.error("❌ الإيميل مستخدم بالفعل.")
-
-    st.markdown("---")
-    st.markdown("**🔄 تعطيل / تفعيل مستخدم**")
-    uid_t = st.number_input("رقم المستخدم (ID)", min_value=2, value=2, step=1)
-    col1, col2 = st.columns(2)
-    if col1.button("✅ تفعيل"):
-        db_execute("UPDATE users SET is_active=1 WHERE id=?", (uid_t,))
-        st.success("تم التفعيل.")
-        st.rerun()
-    if col2.button("🚫 تعطيل"):
-        db_execute("UPDATE users SET is_active=0 WHERE id=?", (uid_t,))
-        st.warning("تم التعطيل.")
-        st.rerun()
-
-
-# ══════════════════════════════════════════════
-#  MAIN ROUTER
-# ══════════════════════════════════════════════
-
-def main():
-    init_db()
-
-    if "role" not in st.session_state:
-        page_login()
+    rows = qall("SELECT order_number, customer_name, quantity, price, status, created_at FROM orders ORDER BY id DESC")
+    if not rows:
+        st.info("لا توجد أوردرات بعد.")
         return
 
-    role = st.session_state["role"]
-    page = sidebar()
+    df = pd.DataFrame(rows)
+    st.dataframe(df.rename(columns={
+        "order_number":"رقم الأوردر","customer_name":"العميل",
+        "quantity":"الكمية","price":"السعر (د.ع)",
+        "status":"الحالة","created_at":"التاريخ",
+    }), use_container_width=True, hide_index=True)
 
-    if page in ("📊 لوحتي",):
-        if role == "admin":
-            page_admin_dashboard()
-        else:
-            page_dashboard()
-
-    elif page == "📊 لوحة المدير":
-        page_admin_dashboard()
-
-    elif page == "➕ أوردر جديد":
-        page_add_order()
-
-    elif page == "📋 أوردراتي":
-        page_header("📋", "أوردراتي", "")
-        guide_box("sales")
-        show_orders_table(role, filter_by_user_id=st.session_state["uid"])
-
-    elif page == "📋 كل الأوردرات":
-        page_header("📋", "جميع الأوردرات", "")
-        show_orders_table(role)
-
-    elif page == "🎨 مهام التصميم":
-        page_design_tasks()
-
-    elif page == "📦 المواد":
-        page_purchase()
-
-    elif page == "🖨️ الإنتاج":
-        page_production()
-
-    elif page == "🗺️ تسجيل زيارة":
-        page_agent_new_visit()
-
-    elif page == "📋 زياراتي":
-        page_agent_visits()
-
-    elif page == "🗺️ تقارير المندوبين":
-        page_agent_report()
-
-    elif page == "🚨 بلاغ خلل":
-        page_submit_incident()
-
-    elif page == "🚨 بلاغات الأعطال":
-        page_all_incidents()
-
-    elif page == "💰 التقارير المالية":
-        if role in ("admin", "sales"):
-            page_financial()
-        else:
-            st.error("🚫 ليس لديك صلاحية الوصول.")
-
-    elif page == "👥 إدارة المستخدمين":
-        if role == "admin":
-            page_user_management()
-        else:
-            st.error("🚫 ليس لديك صلاحية الوصول.")
-
-    footer()
+    # CSV export with developer watermark
+    header = (
+        f"Z-Order — تقرير مالي\n"
+        f"Developed by: {DEVELOPER}\n"
+        f"تاريخ الاستخراج: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n"
+    )
+    csv_data = (header + df.to_csv(index=False)).encode("utf-8-sig")
+    st.download_button(
+        "⬇️ تصدير التقرير CSV",
+        csv_data,
+        file_name=f"zorder_financial_{datetime.date.today()}.csv",
+        mime="text/csv",
+        use_container_width=True,
+    )
 
 
+# ── GENERIC ORDERS VIEW (read-only) ──────────────────────────────────────────
+def pg_view_orders(role):
+    page_hdr("📋", "جميع الأوردرات", "عرض كامل لأوردرات المطبعة")
+    orders_table(role)
+
+
+# ── GENERIC DASHBOARD (non-admin) ────────────────────────────────────────────
+def pg_generic_dash(role):
+    page_hdr("📊", "لوحتي", "نظرة عامة على الأوردرات")
+    guide(role)
+
+    total  = (qone("SELECT COUNT(*) c FROM orders") or {}).get("c", 0)
+    new_   = (qone("SELECT COUNT(*) c FROM orders WHERE status='New'") or {}).get("c", 0)
+    inprod = (qone("SELECT COUNT(*) c FROM orders WHERE production_status='Printing'") or {}).get("c", 0)
+    done   = (qone("SELECT COUNT(*) c FROM orders WHERE production_status='Done'") or {}).get("c", 0)
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("إجمالي الأوردرات", total)
+    c2.metric("جديدة",            new_)
+    c3.metric("تحت الطباعة",      inprod)
+    c4.metric("مكتملة",           done)
+
+    st.markdown("---")
+    st.markdown("**آخر ١٠ أوردرات**")
+    rows = qall("""
+        SELECT order_number, customer_name, description, quantity, status, created_at
+        FROM orders ORDER BY id DESC LIMIT 10
+    """)
+    if rows:
+        st.dataframe(pd.DataFrame(rows).rename(columns={
+            "order_number":"رقم الأوردر","customer_name":"العميل",
+            "description":"الوصف","quantity":"الكمية",
+            "status":"الحالة","created_at":"التاريخ",
+        }), use_container_width=True, hide_index=True)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  MAIN ROUTER
+# ─────────────────────────────────────────────────────────────────────────────
+
+def main():
+    # 1. Init DB (idempotent)
+    init_db()
+
+    # 2. GATEKEEPER — nothing renders until login
+    if not gatekeeper():
+        return
+
+    # 3. Sidebar + navigation
+    role   = st.session_state["role"]
+    active = build_sidebar()
+
+    # 4. Route to the correct page
+    # ── ADMIN routes ──────────────────────────
+    if active == "📊 لوحة المدير":
+        pg_admin_dash()
+
+    elif active == "👥 إدارة الموظفين":
+        pg_employees()
+
+    elif active == "📋 جميع الأوردرات":
+        pg_view_orders(role)
+
+    elif active == "💰 التقارير المالية":
+        pg_financial()
+
+    elif active == "🗺️ تقارير المندوبين":
+        pg_agent_reports()
+
+    elif active == "🚨 بلاغات الأعطال":
+        pg_all_incidents()
+
+    # ── SALES routes ──────────────────────────
+    elif active == "📊 لوحتي" and role == "sales":
+        pg_sales_dash()
+
+    elif active == "➕ أوردر جديد":
+        pg_add_order()
+
+    elif active == "📋 أوردراتي":
+        page_hdr("📋", "أوردراتي", "الأوردرات التي أضفتها")
+        orders_table("sales", uid_filter=st.session_state["uid"])
+
+    elif active == "💰 تقرير المبيعات":
+        pg_financial()
+
+    # ── DESIGN routes ─────────────────────────
+    elif active == "📊 لوحتي" and role == "design":
+        pg_generic_dash(role)
+
+    elif active == "🎨 مهام التصميم":
+        pg_design()
+
+    elif active == "📋 عرض الأوردرات" and role == "design":
+        pg_view_orders(role)
+
+    # ── PRODUCTION routes ─────────────────────
+    elif active == "📊 لوحتي" and role == "production":
+        pg_generic_dash(role)
+
+    elif active == "🖨️ الإنتاج والطباعة":
+        pg_production()
+
+    elif active == "📋 عرض الأوردرات" and role == "production":
+        pg_view_orders(role)
+
+    # ── AGENT routes ──────────────────────────
+    elif active == "📊 لوحتي" and role == "agent":
+        pg_generic_dash(role)
+
+    elif active == "🗺️ تسجيل زيارة":
+        pg_agent_visit()
+
+    elif active == "📋 زياراتي":
+        pg_agent_my_visits()
+
+    # ── Shared: incident report ───────────────
+    elif active == "🚨 بلاغ خلل":
+        pg_submit_incident()
+
+    # ── Fallback ──────────────────────────────
+    else:
+        st.warning(f"الصفحة «{active}» غير متاحة لهذا القسم.")
+
+    # 5. Fixed footer on every page
+    footer_bar()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     main()
