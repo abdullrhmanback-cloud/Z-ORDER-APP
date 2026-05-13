@@ -4,7 +4,7 @@
 ║         نظام إدارة المطبعة — النسخة المحكمة                           ║
 ╠══════════════════════════════════════════════════════════════════════════╣
 ║  Developer   : Abdulrahman Fallah                                       ║
-║  Version     : 3.0.0  (Admin-Controlled Access)                         ║
+║  Version     : 4.0.0  (Responsive Dual-Layout)                          ║
 ║  Stack       : Python 3.x · Streamlit · SQLite3                         ║
 ╠══════════════════════════════════════════════════════════════════════════╣
 ║  التشغيل لأول مرة:                                                      ║
@@ -46,7 +46,7 @@ st.set_page_config(
 # ─────────────────────────────────────────────────────────────────────────────
 DEVELOPER  = "Abdulrahman Fallah"
 APP_NAME   = "Z-Order"
-APP_VER    = "3.0.0"
+APP_VER    = "4.0.0"
 DB_PATH    = "z_order.db"
 UPLOAD_DIR = Path("z_order_uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
@@ -96,6 +96,55 @@ ROLE_PAGES = {
         "🚨 بلاغ خلل",
     ],
 }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  SCREEN WIDTH DETECTOR
+#  Injects a hidden JS snippet that writes window.innerWidth into a Streamlit
+#  query-param, then reads it back to decide desktop vs mobile layout.
+#  Breakpoint: < 768 px  →  mobile  (selectbox nav, no sidebar)
+#              ≥ 768 px  →  desktop (st.sidebar nav)
+# ─────────────────────────────────────────────────────────────────────────────
+import streamlit.components.v1 as components
+
+MOBILE_BREAKPOINT = 768   # px — mirrors the CSS @media breakpoint
+
+def inject_screen_detector():
+    """
+    Embeds a tiny JS script that posts window.innerWidth via
+    window.parent.postMessage so Streamlit can read it via
+    st.session_state after a rerun.
+
+    Strategy (no external deps):
+      1. JS writes the width to sessionStorage + postMessage.
+      2. A Streamlit component listens and stores it in st.session_state["_sw"].
+      3. We also fall back to the "mobile" key stored across reruns.
+    """
+    components.html(
+        """
+        <script>
+          const w = window.innerWidth
+                    || document.documentElement.clientWidth
+                    || document.body.clientWidth;
+          // Write to sessionStorage for fallback
+          sessionStorage.setItem('zorder_sw', w);
+          // Post to Streamlit via the parent frame
+          window.parent.postMessage(
+            {type: 'streamlit:setComponentValue', value: w},
+            '*'
+          );
+        </script>
+        """,
+        height=0,
+        scrolling=False,
+    )
+
+def get_screen_width() -> int:
+    """Return the last known screen width (default 1200 = desktop)."""
+    return st.session_state.get("_sw", 1200)
+
+def is_mobile() -> bool:
+    return get_screen_width() < MOBILE_BREAKPOINT
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  GLOBAL CSS  — Dark Industrial + Mobile-First Responsive
@@ -458,46 +507,121 @@ hr { border-color: var(--bdr) !important; margin: 1.2rem 0 !important; }
    MOBILE RESPONSIVE
    Stack everything vertically on small screens
 ═══════════════════════════════════════════════ */
+/* ══════════════════════════════════════════════
+   MOBILE NAV BAR  (selectbox-based top nav)
+═══════════════════════════════════════════════ */
+.mobile-topbar {
+  display:         flex;
+  align-items:     center;
+  gap:             .6rem;
+  background:      var(--bg1);
+  border:          1px solid var(--bdr2);
+  border-radius:   var(--r2);
+  padding:         .6rem .9rem;
+  margin-bottom:   1rem;
+}
+.mobile-topbar .uavatar {
+  width: 30px; height: 30px; font-size: .75rem; flex-shrink: 0;
+}
+.mobile-topbar .uinfo {
+  flex: 1; min-width: 0;
+}
+.mobile-topbar .uinfo .uname {
+  font-size: .82rem; font-weight: 600; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.mobile-topbar .uinfo .urole {
+  font-size: .66rem; color: var(--t3); margin-top: 1px;
+}
+
+/* ══════════════════════════════════════════════
+   MOBILE RESPONSIVE  ≤ 768 px
+   Hides sidebar, forces vertical stacking
+═══════════════════════════════════════════════ */
 @media (max-width: 768px) {
 
-  /* Content padding */
-  .main .block-container { padding: 1rem .6rem 6rem !important; }
+  /* Hide native sidebar on mobile — replaced by selectbox */
+  section[data-testid="stSidebar"] { display: none !important; }
 
-  /* Metric values smaller */
-  [data-testid="stMetricValue"] { font-size: 1.1rem !important; }
-  [data-testid="stMetric"]      { padding: .75rem .9rem !important; }
+  /* Full-width content area, no left margin */
+  .main .block-container {
+    padding:   .75rem .5rem 7rem !important;
+    max-width: 100% !important;
+    margin:    0 !important;
+  }
 
-  /* Page header smaller */
-  .ph-icon { width: 38px; height: 38px; font-size: 1.2rem; }
-  .ph h2   { font-size: 1.05rem; }
-
-  /* Cards full-width padding */
-  .card { padding: .9rem 1rem; }
-
-  /* Forms: stack columns */
-  [data-testid="column"] {
+  /* Wider tables */
+  .stDataFrame, iframe[title="st.dataframe"] {
     width: 100% !important;
-    flex: 0 0 100% !important;
+    overflow-x: auto !important;
+  }
+
+  /* Metric card adjustments */
+  [data-testid="stMetricValue"] { font-size: 1rem !important; }
+  [data-testid="stMetric"]      { padding: .65rem .75rem !important; }
+
+  /* Page header */
+  .ph-icon { width: 34px; height: 34px; font-size: 1.1rem; }
+  .ph h2   { font-size: 1rem; }
+  .ph p    { font-size: .72rem; }
+
+  /* Cards */
+  .card { padding: .8rem .9rem; }
+
+  /* Stack ALL columns vertically */
+  [data-testid="column"] {
+    width:     100% !important;
+    flex:      0 0 100% !important;
     min-width: 100% !important;
+    padding:   0 !important;
   }
 
-  /* Buttons full width on mobile */
+  /* Buttons */
   .stButton > button {
-    font-size:  .88rem !important;
-    padding:    .7rem 1rem !important;
+    font-size: .86rem !important;
+    padding:   .65rem .9rem !important;
+    min-height: 44px !important;   /* touch-friendly */
   }
 
-  /* Tabs wrap nicely */
-  .stTabs [data-baseweb="tab"] { font-size: .76rem !important; padding: .35rem .55rem !important; }
+  /* Tabs scroll horizontally on mobile */
+  .stTabs [data-baseweb="tab-list"] { flex-wrap: nowrap !important; overflow-x: auto !important; }
+  .stTabs [data-baseweb="tab"]      { font-size: .74rem !important; padding: .3rem .5rem !important; white-space: nowrap; }
 
-  /* Login card full width */
-  .login-card { padding: 1.8rem 1.2rem; }
+  /* Expanders */
+  .streamlit-expanderHeader { font-size: .82rem !important; }
 
-  /* Footer single line */
-  .footer { font-size: .65rem; padding: .4rem .75rem; }
+  /* Inputs */
+  .stTextInput>div>div>input,
+  .stTextArea>div>div>textarea,
+  .stSelectbox>div>div { font-size: .86rem !important; }
 
-  /* Hide sidebar button text on mobile — icons still show */
-  section[data-testid="stSidebar"] .stRadio label { font-size: .82rem !important; }
+  /* Footer */
+  .footer {
+    font-size:  .62rem;
+    padding:    .4rem .6rem;
+    flex-wrap:  wrap;
+    gap:        .3rem;
+  }
+
+  /* Mobile nav selectbox */
+  .mobile-nav-wrap .stSelectbox>div>div {
+    background:    var(--bg1) !important;
+    border:        1px solid var(--bdr2) !important;
+    font-weight:   600 !important;
+    font-size:     .88rem !important;
+    border-radius: var(--r) !important;
+  }
+}
+
+/* ══════════════════════════════════════════════
+   DESKTOP  ≥ 769 px — keep sidebar, full layout
+═══════════════════════════════════════════════ */
+@media (min-width: 769px) {
+  .mobile-topbar { display: none !important; }
+  .mobile-nav-wrap { display: none !important; }
+
+  /* Ensure full width for all dataframes */
+  .stDataFrame, iframe[title="st.dataframe"] { width: 100% !important; }
 }
 </style>
 """
@@ -911,13 +1035,15 @@ def gatekeeper():
 # ─────────────────────────────────────────────────────────────────────────────
 
 def build_sidebar() -> str:
+    """
+    Desktop navigation — classic st.sidebar with radio buttons.
+    Called only when is_mobile() == False.
+    """
     role  = st.session_state["role"]
     uname = st.session_state["uname"]
     rinfo = ROLES.get(role, {"label": role, "icon": "👤", "color": "#e8a020"})
-
     initials = "".join(w[0] for w in uname.split()[:2]).upper() or "?"
 
-    # Logo
     st.sidebar.markdown(
         f'<div style="padding:.4rem 0 .2rem">'
         f'  <div class="z-logo">Z<span class="sep">-</span>Order</div>'
@@ -929,7 +1055,6 @@ def build_sidebar() -> str:
     )
     st.sidebar.markdown("---")
 
-    # User chip — name + role
     st.sidebar.markdown(
         f'<div class="uchip">'
         f'  <div class="uavatar">{initials}</div>'
@@ -943,13 +1068,10 @@ def build_sidebar() -> str:
         unsafe_allow_html=True,
     )
 
-    # Navigation
     pages  = ROLE_PAGES.get(role, [])
     active = st.sidebar.radio("nav", pages, label_visibility="collapsed")
 
     st.sidebar.markdown("---")
-
-    # Developer credit in sidebar
     st.sidebar.markdown(
         f'<div style="font-size:.66rem;color:var(--t3);text-align:center;line-height:1.9">'
         f'  Developed by<br>'
@@ -957,14 +1079,77 @@ def build_sidebar() -> str:
         f'</div>',
         unsafe_allow_html=True,
     )
-
-    # Logout
     st.sidebar.markdown("<br>", unsafe_allow_html=True)
     if st.sidebar.button("🚪  تسجيل الخروج"):
         for k in list(st.session_state.keys()):
             del st.session_state[k]
         st.rerun()
 
+    return active
+
+
+def build_mobile_nav() -> str:
+    """
+    Mobile navigation — compact top bar + selectbox.
+    Replaces the sidebar entirely on small screens.
+    Hides the native sidebar via CSS.
+    """
+    role  = st.session_state["role"]
+    uname = st.session_state["uname"]
+    rinfo = ROLES.get(role, {"label": role, "icon": "👤", "color": "#e8a020"})
+    initials = "".join(w[0] for w in uname.split()[:2]).upper() or "?"
+
+    # ── Force-hide sidebar on mobile ──
+    st.markdown(
+        "<style>"
+        "section[data-testid='stSidebar']{display:none!important}"
+        ".main .block-container{padding:.6rem .45rem 7rem!important;max-width:100%!important}"
+        "</style>",
+        unsafe_allow_html=True,
+    )
+
+    # ── Top identity bar ──
+    col_av, col_info, col_out = st.columns([1, 5, 2])
+    with col_av:
+        st.markdown(
+            f'<div class="uavatar" style="margin-top:.3rem">{initials}</div>',
+            unsafe_allow_html=True,
+        )
+    with col_info:
+        st.markdown(
+            f'<div style="padding-top:.25rem">'
+            f'  <div style="font-size:.82rem;font-weight:700;color:var(--t1);line-height:1.1">{uname}</div>'
+            f'  <div style="font-size:.66rem;color:{rinfo["color"]}">{rinfo["icon"]} {rinfo["label"]}</div>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+    with col_out:
+        if st.button("خروج 🚪", key="mob_logout"):
+            for k in list(st.session_state.keys()):
+                del st.session_state[k]
+            st.rerun()
+
+    # ── Selectbox navigation ──
+    pages  = ROLE_PAGES.get(role, [])
+
+    # Keep selected page across reruns
+    if "mob_page" not in st.session_state:
+        st.session_state["mob_page"] = pages[0]
+    if st.session_state["mob_page"] not in pages:
+        st.session_state["mob_page"] = pages[0]
+
+    st.markdown('<div class="mobile-nav-wrap">', unsafe_allow_html=True)
+    active = st.selectbox(
+        "📂 القسم",
+        pages,
+        index=pages.index(st.session_state["mob_page"]),
+        key="mob_nav_sel",
+        label_visibility="collapsed",
+    )
+    st.markdown('</div>', unsafe_allow_html=True)
+    st.session_state["mob_page"] = active
+
+    st.markdown("---")
     return active
 
 
@@ -1600,11 +1785,36 @@ def main():
     if not gatekeeper():
         return
 
-    # 3. Sidebar + navigation
-    role   = st.session_state["role"]
-    active = build_sidebar()
+    # 3. Screen-width detection
+    #    The HTML component writes width to session_state["_sw"] via
+    #    Streamlit's component value mechanism.
+    sw_component = components.html(
+        """
+        <script>
+          const w = window.innerWidth
+                    || document.documentElement.clientWidth
+                    || document.body.clientWidth;
+          window.parent.postMessage(
+            {type: 'streamlit:setComponentValue', value: w},
+            '*'
+          );
+        </script>
+        """,
+        height=0,
+        scrolling=False,
+    )
+    if sw_component is not None:
+        st.session_state["_sw"] = int(sw_component)
 
-    # 4. Route to the correct page
+    role   = st.session_state["role"]
+
+    # 4. Dual-layout: sidebar on desktop, selectbox on mobile
+    if is_mobile():
+        active = build_mobile_nav()
+    else:
+        active = build_sidebar()
+
+    # 5. Route to the correct page
     # ── ADMIN routes ──────────────────────────
     if active == "📊 لوحة المدير":
         pg_admin_dash()
@@ -1676,7 +1886,7 @@ def main():
     else:
         st.warning(f"الصفحة «{active}» غير متاحة لهذا القسم.")
 
-    # 5. Fixed footer on every page
+    # 6. Fixed footer on every page
     footer_bar()
 
 
