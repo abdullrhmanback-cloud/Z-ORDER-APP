@@ -20,8 +20,8 @@ import pandas as pd
 
 # ── Page config (first Streamlit call) ───────────────────────────────────────
 st.set_page_config(
-    page_title="Z-ORDER V2 | Built for Organized Teams",
-    page_icon="🖨️",
+    page_title="Z-ORDER | Built for Organized Teams",
+    page_icon="https://raw.githubusercontent.com/abdullrhmanback-cloud/Z-ORDER-APP/refs/heads/main/IMG_5574.PNG",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -333,11 +333,33 @@ hr{border-color:var(--bdr) !important;margin:.85rem 0 !important;}
 #  Injected once via st.components — works on Android Chrome & iOS Safari PWA
 # ══════════════════════════════════════════════════════════════════════════════
 st.markdown("""
-<!-- PWA Manifest (inline) -->
-<link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiWi1PUkRFUiBWMiIsInNob3J0X25hbWUiOiJaLU9SREVSIiwic3RhcnRfdXJsIjoiLyIsImRpc3BsYXkiOiJzdGFuZGFsb25lIiwiYmFja2dyb3VuZF9jb2xvciI6IiMwNjA3MDgiLCJ0aGVtZV9jb2xvciI6IiNlOGEwMjAiLCJpY29ucyI6W3sic3JjIjoiaHR0cHM6Ly9pLmltZ3VyLmNvbS96b3JkZXJfaWNvbi5wbmciLCJzaXplcyI6IjE5MngxOTIiLCJ0eXBlIjoiaW1hZ2UvcG5nIn1dfQ==">
+<!-- PWA Manifest (inline) — Z ORDER icon + name -->
+<link rel="manifest" href="data:application/manifest+json,{
+  &quot;name&quot;: &quot;Z ORDER&quot;,
+  &quot;short_name&quot;: &quot;Z ORDER&quot;,
+  &quot;start_url&quot;: &quot;/&quot;,
+  &quot;display&quot;: &quot;standalone&quot;,
+  &quot;background_color&quot;: &quot;#060708&quot;,
+  &quot;theme_color&quot;: &quot;#e8a020&quot;,
+  &quot;icons&quot;: [
+    {
+      &quot;src&quot;: &quot;https://raw.githubusercontent.com/abdullrhmanback-cloud/Z-ORDER-APP/refs/heads/main/IMG_5574.PNG&quot;,
+      &quot;sizes&quot;: &quot;192x192&quot;,
+      &quot;type&quot;: &quot;image/png&quot;,
+      &quot;purpose&quot;: &quot;any maskable&quot;
+    },
+    {
+      &quot;src&quot;: &quot;https://raw.githubusercontent.com/abdullrhmanback-cloud/Z-ORDER-APP/refs/heads/main/IMG_5574.PNG&quot;,
+      &quot;sizes&quot;: &quot;512x512&quot;,
+      &quot;type&quot;: &quot;image/png&quot;,
+      &quot;purpose&quot;: &quot;any maskable&quot;
+    }
+  ]
+}">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Z-ORDER V2">
+<meta name="apple-mobile-web-app-title" content="Z ORDER">
+<link rel="apple-touch-icon" href="https://raw.githubusercontent.com/abdullrhmanback-cloud/Z-ORDER-APP/refs/heads/main/IMG_5574.PNG">
 <meta name="theme-color" content="#e8a020">
 
 <script>
