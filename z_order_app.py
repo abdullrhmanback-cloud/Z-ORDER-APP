@@ -482,17 +482,55 @@ def _get(table, filters=None, order=None, limit=500, single=False):
 
 
 def _post(table, data):
+    """
+    Insert a row into a Supabase table.
+    Returns the inserted row dict on success, None on failure.
+    Logs the REAL Supabase error message — never swallows it silently.
+    """
     try:
         r = requests.post(f"{REST}/{table}", headers=RH, json=data, timeout=10)
         if r.status_code in (200, 201):
             d = r.json()
             _get_cached.clear()
             return d[0] if isinstance(d, list) and d else d
-        if r.status_code == 409: return None   # duplicate key, silent
-        st.error(f"خطأ ({table}): {r.text[:180]}")
+        # ── Expose real error from Supabase in the return value ──────────────
+        # Caller decides whether to show it — we don't call st.error() here
+        # because _post is used inside _complete_reg which has its own handling.
+        return {"__error__": True,
+                "__status__": r.status_code,
+                "__msg__": r.text}
+    except requests.exceptions.Timeout:
+        return {"__error__": True, "__status__": 0,
+                "__msg__": "انتهت مهلة الاتصال بـ Supabase (timeout)."}
+    except requests.exceptions.ConnectionError:
+        return {"__error__": True, "__status__": 0,
+                "__msg__": "تعذّر الاتصال بـ Supabase. تحقق من الإنترنت."}
     except Exception as e:
-        st.error(f"خطأ شبكة: {e}")
-    return None
+        return {"__error__": True, "__status__": 0, "__msg__": str(e)}
+
+
+def _post_ok(result) -> bool:
+    """Returns True if _post() succeeded (result is a real row, not an error dict)."""
+    if result is None: return False
+    if isinstance(result, dict) and result.get("__error__"): return False
+    return True
+
+
+def _post_err(result) -> str:
+    """Extracts human-readable error from a failed _post() result."""
+    if result is None: return "لم يُرجع Supabase أي استجابة."
+    if isinstance(result, dict) and result.get("__error__"):
+        status = result.get("__status__", "?")
+        msg    = result.get("__msg__", "")
+        # Parse Supabase JSON error if possible
+        try:
+            import json
+            err_json = json.loads(msg)
+            detail   = err_json.get("message") or err_json.get("details") or msg
+        except Exception:
+            detail = msg[:300]
+        return f"[HTTP {status}] {detail}"
+    return ""
 
 
 def _patch(table, match, data):
