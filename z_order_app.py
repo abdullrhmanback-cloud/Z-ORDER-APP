@@ -1691,32 +1691,32 @@ if __name__ == "__main__":
 #  https://iiytcythowpemjxcxfsf.supabase.co → SQL Editor → New Query
 # ═══════════════════════════════════════════════════════════════════════════
 """
--- 1. workspaces
-create table if not exists workspaces (
-    id         bigserial primary key,
-    name       text not null,
-    slug       text unique not null,
-    plan       text default 'starter',
-    is_active  boolean default true,
-    created_at timestamptz default now()
+#-- 1. workspaces
+#create table if not exists workspaces (
+ #   id         bigserial primary key,
+ #   name       text not null,
+ #   slug       text unique not null,
+ #   plan       text default 'starter',
+ #   is_active  boolean default true,
+#    created_at timestamptz default now()
 );
 
--- 2. users  (workspace_id=0 → superadmin)
-create table if not exists users (
-    id           bigserial primary key,
-    workspace_id bigint default 0,
-    full_name    text not null,
-    username     text not null,
-    email        text unique not null,
-    password     text not null,
-    role         text not null,
-    created_by   bigint default 0,
-    is_active    boolean default true,
-    created_at   timestamptz default now(),
-    unique (workspace_id, username)
+#-- 2. users  (workspace_id=0 → superadmin)
+#create table if not exists users (
+#    id           bigserial primary key,
+#    workspace_id bigint default 0,
+#    full_name    text not null,
+#    username     text not null,
+#    email        text unique not null,
+#    password     text not null,
+#    role         text not null,
+ #   created_by   bigint default 0,
+#    is_active    boolean default true,
+#    created_at   timestamptz default now(),
+#    unique (workspace_id, username)
 );
 
--- 3. orders
+#-- 3. orders
 create table if not exists orders (
     id                 bigserial primary key,
     workspace_id       bigint not null,
