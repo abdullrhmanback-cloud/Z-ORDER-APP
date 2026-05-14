@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════════════════╗
-║   Z-ORDER  ·  Built for Organized Teams  ·  v9.0  FINAL               ║
+║   Z-ORDER V2  ·  Built for Organized Teams  ·  v2.0  FINAL            ║
 ╠══════════════════════════════════════════════════════════════════════════╣
 ║  Developer  : Abdulrahman Fallah  ©  2026                              ║
 ║  Backend    : Supabase  (PostgreSQL · Auth · Storage)                  ║
@@ -20,7 +20,7 @@ import pandas as pd
 
 # ── Page config (first Streamlit call) ───────────────────────────────────────
 st.set_page_config(
-    page_title="Z-ORDER | Built for Organized Teams",
+    page_title="Z-ORDER V2 | Built for Organized Teams",
     page_icon="🖨️",
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -30,9 +30,9 @@ st.set_page_config(
 #  CONSTANTS
 # ══════════════════════════════════════════════════════════════════════════════
 DEVELOPER     = "Abdulrahman Fallah"
-APP_NAME      = "Z-ORDER"
+APP_NAME      = "Z-ORDER V2"
 APP_TAGLINE   = "Built for Organized Teams"
-APP_VER       = "9.0"
+APP_VER       = "2.0"
 YEAR          = "2026"
 SUPPORT_WA    = "https://wa.me/9647768723110"
 SUPPORT_PHONE = "+964 776 872 3110"
@@ -1181,86 +1181,139 @@ def pg_sales_dash():
     show_orders("sales", uid_filter=uid, title="أوردراتي الأخيرة")
 
 
-PAPER_TYPES = ["ورق كوشيه","ورق أوفست","ورق كرافت","ورق فلكس","ورق لامينيت","أخرى"]
-SIZES       = ["A0","A1","A2","A3","A4","A5","50×70","60×90","70×100","مقاس مخصص"]
-
 def pg_add_order():
-    hdr("➕","أوردر جديد — نموذج المطبعة الكامل","أدخل كل تفاصيل الطلب بدقة")
-    with st.form("new_order", clear_on_submit=True):
+    hdr("➕","أوردر جديد — Z-ORDER V2","أدخل تفاصيل الطلب يدوياً بحرية كاملة")
+
+    with st.form("new_order_v2", clear_on_submit=True):
+
+        # ── بيانات العميل ──────────────────────────────────────────────────
         st.markdown('<div class="sec">👤 بيانات العميل</div>', unsafe_allow_html=True)
-        c1,c2 = st.columns(2)
-        cust  = c1.text_input("اسم الزبون *")
-        phone = c2.text_input("رقم الهاتف")
+        c1, c2 = st.columns(2)
+        cust    = c1.text_input("اسم العميل *", placeholder="مثال: أحمد محمد")
+        phone   = c2.text_input("رقم الهاتف",  placeholder="مثال: 07901234567")
 
-        st.markdown('<div class="sec">🖨️ تفاصيل الطباعة</div>', unsafe_allow_html=True)
-        c3,c4 = st.columns(2)
-        paper = c3.selectbox("نوع الورق *", PAPER_TYPES)
-        size  = c4.selectbox("القياس *",    SIZES)
-        if size == "مقاس مخصص":
-            size = st.text_input("أدخل المقاس المخصص *", placeholder="مثال: 45×60 سم")
+        # ── تفاصيل الطلب ──────────────────────────────────────────────────
+        st.markdown('<div class="sec">🖨️ تفاصيل الطلب</div>', unsafe_allow_html=True)
+        c3, c4 = st.columns(2)
+        qty_txt = c3.text_input(
+            "الكمية *",
+            placeholder="مثال: 500 كارت، 3 أمتار، 10 لفات"
+        )
+        size_txt = c4.text_input(
+            "القياس",
+            placeholder="مثال: A4، 50×70 سم، 90×50 مم"
+        )
 
-        c5,c6 = st.columns(2)
-        qty   = c5.number_input("الكمية *", min_value=1, value=100)
-        desc  = c6.text_area("وصف / ملاحظات الطلب",
-                              placeholder="ألوان، وجه أو وجهان، لمعة، مط...",
-                              height=90)
+        biz = st.text_input(
+            "النشاط التجاري",
+            placeholder="مثال: مطعم، محل ملابس، شركة إنشاء"
+        )
 
+        desc = st.text_area(
+            "التفاصيل",
+            placeholder="ألوان الطباعة، عدد الوجوه، نوع الورق، أي ملاحظات إضافية...",
+            height=100,
+        )
+
+        # ── التسعير والدفع ─────────────────────────────────────────────────
         st.markdown('<div class="sec">💰 التسعير والدفع</div>', unsafe_allow_html=True)
-        c7,c8,c9 = st.columns(3)
-        total_p = c7.number_input("السعر الكلي (د.ع) *", min_value=0.0, step=500.0)
-        paid    = c8.number_input("المبلغ المدفوع (د.ع)", min_value=0.0, step=500.0)
-        remain  = total_p - paid
-        c9.metric("المبلغ المتبقي (د.ع)", f"{remain:,.0f}")
+        c5, c6 = st.columns(2)
+        total_p = c5.number_input(
+            "السعر الكلي (د.ع) *",
+            min_value=0.0, step=500.0, value=0.0,
+            help="أدخل السعر الكلي للطلب بالدينار العراقي"
+        )
+        paid = c6.number_input(
+            "المبلغ المدفوع (د.ع)",
+            min_value=0.0, step=500.0, value=0.0,
+            help="المبلغ الذي دفعه العميل مقدماً"
+        )
+        remain = total_p - paid
 
-        deliv_date = st.date_input("📅 تاريخ التسليم المتوقع",
-                                   value=datetime.date.today() + datetime.timedelta(days=3))
+        # عرض المتبقي مباشرة داخل الفورم
+        st.markdown(
+            f'<div style="background:var(--bg3);border:1px solid var(--bdr2);'
+            f'border-radius:var(--r);padding:.65rem 1rem;margin:.3rem 0;">'
+            f'<span style="color:var(--t2);font-size:.8rem;">المبلغ المتبقي (د.ع)</span>'
+            f'<div style="color:var(--gold);font-family:JetBrains Mono,monospace;'
+            f'font-size:1.2rem;font-weight:700;margin-top:2px;">'
+            f'{remain:,.0f} <span style="font-size:.75rem;color:var(--t3);">د.ع</span>'
+            f'</div></div>',
+            unsafe_allow_html=True,
+        )
+
+        # ── التاريخ ────────────────────────────────────────────────────────
+        st.markdown('<div class="sec">📅 التاريخ</div>', unsafe_allow_html=True)
+        order_date = st.date_input(
+            "تاريخ الطلب",
+            value=datetime.date.today(),
+            help="تاريخ استلام الطلب — الافتراضي هو اليوم"
+        )
+
         sub = st.form_submit_button("✅ حفظ الأوردر", use_container_width=True)
 
+    # ── معالجة الإرسال ────────────────────────────────────────────────────
     if sub:
-        if not cust.strip() or total_p <= 0:
-            st.error("يرجى تعبئة اسم الزبون والسعر الكلي.")
+        errors = []
+        if not cust.strip():         errors.append("اسم العميل مطلوب.")
+        if not qty_txt.strip():      errors.append("الكمية مطلوبة.")
+        if total_p <= 0:             errors.append("السعر الكلي يجب أن يكون أكبر من صفر.")
+        if paid > total_p:           errors.append("المبلغ المدفوع لا يمكن أن يتجاوز السعر الكلي.")
+
+        if errors:
+            for e in errors:
+                st.error(e)
         else:
             ono = _order_no()
-            res = _post("orders",{
-                "workspace_id":    wid(),
-                "order_number":    ono,
-                "customer_name":   cust.strip(),
-                "customer_phone":  phone.strip(),
-                "paper_type":      paper,
-                "size":            size,
-                "quantity":        int(qty),
-                "description":     desc.strip(),
-                "total_price":     float(total_p),
-                "paid":            float(paid),
-                "remaining":       float(remain),
-                "delivery_date":   str(deliv_date),
-                "created_by_id":   st.session_state["uid"],
-                "created_by_name": st.session_state["uname"],
-                "status":          "جديد",
-                "design_status":   "قيد الانتظار",
+            res = _post("orders", {
+                "workspace_id":     wid(),
+                "order_number":     ono,
+                "customer_name":    cust.strip(),
+                "customer_phone":   phone.strip(),
+                "quantity":         qty_txt.strip(),     # نصي يدوي
+                "size":             size_txt.strip(),    # نصي يدوي
+                "paper_type":       biz.strip(),         # نشاط تجاري → يُخزَّن في paper_type
+                "description":      desc.strip(),
+                "total_price":      float(total_p),
+                "paid":             float(paid),
+                "remaining":        float(remain),
+                "delivery_date":    str(order_date),
+                "created_by_id":    st.session_state["uid"],
+                "created_by_name":  st.session_state["uname"],
+                "status":           "جديد",
+                "design_status":    "قيد الانتظار",
                 "production_status":"قيد الانتظار",
-                "delivered":       False,
+                "delivered":        False,
             })
+
             if res:
-                # Push notification to design team
-                _push_notification(wid(), f"أوردر جديد: {ono}",
-                                   f"العميل: {cust} | {qty} نسخة | {paper} {size}",
-                                   target_roles=["design"], order_id=res.get("id"))
-                st.success(f"✅ تم حفظ الأوردر **{ono}**!")
-                # Show summary
+                # إشعار لقسم التصميم
+                _push_notification(
+                    wid(),
+                    f"أوردر جديد: {ono}",
+                    f"العميل: {cust.strip()} | الكمية: {qty_txt.strip()}",
+                    target_roles=["design"],
+                    order_id=res.get("id"),
+                )
+
+                st.success(f"✅ تم حفظ الأوردر **{ono}** بنجاح!")
+
+                # ملخص الأوردر بعد الحفظ
                 st.markdown(
-                    f'<div class="order-summary">'
-                    f'<table>'
+                    f'<div class="order-summary"><table>'
                     f'<tr><td>رقم الأوردر</td><td>{ono}</td></tr>'
-                    f'<tr><td>العميل</td><td>{cust}</td></tr>'
-                    f'<tr><td>الورق / القياس</td><td>{paper} · {size}</td></tr>'
-                    f'<tr><td>الكمية</td><td>{qty} نسخة</td></tr>'
-                    f'<tr><td>تاريخ التسليم</td><td>{deliv_date}</td></tr>'
+                    f'<tr><td>العميل</td><td>{cust.strip()}</td></tr>'
+                    f'<tr><td>الهاتف</td><td>{phone.strip() or "—"}</td></tr>'
+                    f'<tr><td>الكمية</td><td>{qty_txt.strip()}</td></tr>'
+                    f'<tr><td>القياس</td><td>{size_txt.strip() or "—"}</td></tr>'
+                    f'<tr><td>النشاط التجاري</td><td>{biz.strip() or "—"}</td></tr>'
+                    f'<tr><td>التاريخ</td><td>{order_date}</td></tr>'
                     f'<tr class="total-row"><td>السعر الكلي</td><td>{total_p:,.0f} د.ع</td></tr>'
                     f'<tr><td>المدفوع</td><td>{paid:,.0f} د.ع</td></tr>'
                     f'<tr><td>المتبقي</td><td>{remain:,.0f} د.ع</td></tr>'
                     f'</table></div>',
-                    unsafe_allow_html=True)
+                    unsafe_allow_html=True,
+                )
 
 
 def pg_sales_preview():
