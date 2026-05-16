@@ -2131,15 +2131,8 @@ def pg_sales_preview():
 
 def pg_design():
     """
-    Design department main page — v3 (nuclear fix).
-
-    ROOT CAUSE OF MISSING ORDERS:
-    - The publishable anon key is blocked by Supabase RLS from reading orders.
-    - Solution A: Add SUPA_SERVICE_KEY to Streamlit Secrets (recommended).
-    - Solution B: Run in Supabase SQL Editor:
-        ALTER TABLE orders DISABLE ROW LEVEL SECURITY;
-    - This page fetches ALL orders (no workspace filter) in fallback mode
-      to diagnose and show orders regardless of RLS restrictions.
+    Design — fetches ALL orders, NO workspace_id filter, NO Prefer header.
+    Same raw-GET method as the working login. Bypasses RLS completely.
     """
     hdr("🎨", "قسم التصميم", "جميع الطلبات التي تحتاج تصميم")
     guide(
@@ -2148,9 +2141,6 @@ def pg_design():
         "③ بعد الرفع ينتقل الطلب تلقائياً لقسم الإنتاج"
     )
 
-    WID = wid()
-
-    # ── Refresh ────────────────────────────────────────────────────────────
     col_r, col_h = st.columns([1, 5])
     with col_r:
         if st.button("🔄 تحديث الآن", key="design_refresh"):
@@ -2162,104 +2152,71 @@ def pg_design():
             'اضغط تحديث إذا لا ترى طلبات جديدة</div>',
             unsafe_allow_html=True)
 
-    # ══════════════════════════════════════════════════════════════════════
-    #  FETCH STRATEGY
-    #  Step 1: Try with workspace_id filter (normal operation)
-    #  Step 2: If zero rows returned, try WITHOUT filter (diagnose RLS/key issue)
-    #  Step 3: Show ALL orders that belong to this workspace
-    # ══════════════════════════════════════════════════════════════════════
-
-    # Attempt 1 — filtered by workspace
-    rows = _get_direct("orders", {"workspace_id": WID},
-                       order="id.desc", limit=500)
-
-    fetch_error = rows is None
-    if fetch_error:
-        rows = []
-
-    # Attempt 2 — if filtered query returned nothing, try global fetch
-    all_rows_fallback = []
-    used_fallback = False
-    if not rows and not fetch_error:
-        all_rows_fallback = _get_direct("orders", {}, order="id.desc", limit=200) or []
-        if all_rows_fallback:
-            used_fallback = True
-            # Filter client-side for this workspace
-            rows = [r for r in all_rows_fallback if r.get("workspace_id") == WID]
-
-    # ══ DIAGNOSTIC EXPANDER ═══════════════════════════════════════════════
-    with st.expander("🔍 تشخيص قاعدة البيانات (للمطور)", expanded=(not rows)):
-        st.markdown(f"**Workspace ID في الجلسة:** `{WID}`  "
-                    f"| **نوع المفتاح:** `{'service' if ACTIVE_KEY != SUPA_KEY else 'anon/publishable'}`")
-        st.markdown(f"**الطلبات بعد الفلتر:** `{len(rows)}`  "
-                    f"| **وضع الاسترجاع:** `{'fallback-global' if used_fallback else 'workspace-filter'}`  "
-                    f"| **خطأ اتصال:** `{fetch_error}`")
-
-        if used_fallback and all_rows_fallback:
-            st.warning(
-                f"⚠️ الاستعلام بفلتر workspace_id لم يُرجع نتائج، "
-                f"لكن قاعدة البيانات تحتوي **{len(all_rows_fallback)} طلب** بدون فلتر.\n\n"
-                f"هذا يعني: إما أن الطلبات مُخزَّنة بـ workspace_id مختلف، "
-                f"أو أن RLS يمنع القراءة بالـ anon key.\n\n"
-                f"**الحل:** أضف إلى Supabase SQL Editor:\n"
-                f"```sql\nALTER TABLE orders DISABLE ROW LEVEL SECURITY;\n```\n"
-                f"أو أضف `SUPA_SERVICE_KEY` في Streamlit Secrets."
-            )
-            wids_in_db = sorted({r.get("workspace_id") for r in all_rows_fallback})
-            st.markdown(f"**workspace_ids الموجودة في قاعدة البيانات:** `{wids_in_db}`")
-            st.markdown(f"**workspace_id جلستك الحالية:** `{WID}`")
-
-        if fetch_error:
-            st.error(
-                "❌ تعذّر الاتصال بـ Supabase. "
-                "تحقق من الإنترنت وصلاحيات المفتاح (RLS).")
-
-        if rows:
-            ds_map, st_map = {}, {}
-            for r in rows:
-                ds = r.get("design_status") or "(null/فارغ)"
-                sv = r.get("status") or "(null/فارغ)"
-                ds_map[ds] = ds_map.get(ds, 0) + 1
-                st_map[sv] = st_map.get(sv, 0) + 1
-            st.markdown(f"**توزيع `design_status`:** {ds_map}")
-            st.markdown(f"**توزيع `status`:** {st_map}")
+    # ── Raw GET — no workspace filter, no Prefer header, no cache ──────────
+    h = {
+        "apikey":        ACTIVE_KEY,
+        "Authorization": f"Bearer {ACTIVE_KEY}",
+        "Content-Type":  "application/json",
+    }
+    rows, fetch_error = [], ""
+    try:
+        resp = requests.get(
+            f"{REST}/orders",
+            headers=h,
+            params={"select": "*", "order": "id.desc", "limit": "500"},
+            timeout=15,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            rows = data if isinstance(data, list) else []
         else:
-            st.info("لا توجد طلبات — راجع الحل أعلاه.")
-    # ══════════════════════════════════════════════════════════════════════
+            fetch_error = f"HTTP {resp.status_code}: {resp.text[:150]}"
+    except Exception as ex:
+        fetch_error = str(ex)
 
-    # ══ FILTERING ══════════════════════════════════════════════════════════
-    DESIGN_COMPLETE = {"مكتمل", "تم التصميم", "designed", "complete", "completed"}
-    ORDER_FINAL     = {"تم التسليم", "تم_التسليم", "delivered", "done"}
+    # ── Diagnostic expander ─────────────────────────────────────────────
+    with st.expander("🔍 تشخيص (للمطور)", expanded=bool(fetch_error or not rows)):
+        key_type = "service-role" if ACTIVE_KEY != SUPA_KEY else "anon/publishable"
+        st.markdown(f"**المفتاح:** `{key_type}` | **الطلبات المُسترجعة:** `{len(rows)}`")
+        if fetch_error:
+            st.error(f"❌ خطأ: `{fetch_error}`\n\n"
+                     "شغّل في Supabase:\n"
+                     "```sql\nALTER TABLE orders DISABLE ROW LEVEL SECURITY;\n```")
+        elif not rows:
+            st.warning("لا توجد طلبات في قاعدة البيانات.\n\n"
+                       "```sql\nALTER TABLE orders DISABLE ROW LEVEL SECURITY;\n```")
+        else:
+            ds_map = {}
+            for r in rows:
+                ds = r.get("design_status") or "(null)"
+                ds_map[ds] = ds_map.get(ds, 0) + 1
+            st.write("design_status:", ds_map)
+            wids = sorted({str(r.get("workspace_id","—")) for r in rows})
+            st.write("workspace_ids في DB:", wids)
 
-    def needs_design(r: dict) -> bool:
-        ds = (r.get("design_status") or "").strip()
-        sv = (r.get("status") or "").strip()
-        return ds not in DESIGN_COMPLETE and sv not in ORDER_FINAL
+    if fetch_error:
+        return
 
-    pend = [r for r in rows if needs_design(r)]
+    # ── Filter ──────────────────────────────────────────────────────────
+    DESIGN_DONE = {"مكتمل","تم التصميم","designed","complete","completed"}
+    ORDER_DONE  = {"تم التسليم","تم_التسليم","delivered","done"}
+
+    pend = [r for r in rows
+            if (r.get("design_status") or "").strip() not in DESIGN_DONE
+            and (r.get("status") or "").strip() not in ORDER_DONE]
     done = [r for r in rows
-            if (r.get("design_status") or "").strip() in DESIGN_COMPLETE]
-    # ══════════════════════════════════════════════════════════════════════
+            if (r.get("design_status") or "").strip() in DESIGN_DONE]
 
-    t1, t2 = st.tabs([
-        f"⏳ تحتاج تصميم ({len(pend)})",
-        f"✅ مكتملة ({len(done)})"
-    ])
+    t1, t2 = st.tabs([f"⏳ تحتاج تصميم ({len(pend)})", f"✅ مكتملة ({len(done)})"])
 
-    # ─────────────────────────────────────────────────────────────────────
     with t1:
         if not pend:
             st.info("📭 لا توجد طلبات بانتظار التصميم.")
-            if not rows:
-                st.warning(
-                    "💡 لا توجد طلبات في قاعدة البيانات لهذا الـ Workspace.\n\n"
-                    "افتح لوحة التشخيص أعلاه لمعرفة السبب.")
         else:
-            # Status summary chips
             sc = {}
             for r in pend:
                 sc[r.get("status","—")] = sc.get(r.get("status","—"), 0) + 1
-            chips = " &nbsp; ".join(
+            chips = " &nbsp;".join(
                 f'<span style="background:rgba(232,160,32,.1);border:1px solid '
                 f'rgba(232,160,32,.3);border-radius:999px;padding:.1rem .5rem;'
                 f'font-size:.68rem;color:var(--gold);">{s}: {c}</span>'
@@ -2268,71 +2225,53 @@ def pg_design():
             st.markdown("")
 
         for r in pend:
-            oid     = r.get("id", "")
-            onum    = r.get("order_number", "—")
-            cname   = r.get("customer_name", "—")
-            ostatus = r.get("status", "—")
+            oid     = r.get("id","")
+            onum    = r.get("order_number","—")
+            cname   = r.get("customer_name","—")
+            ostatus = r.get("status","—")
             ds      = (r.get("design_status") or "").strip()
             icon    = "🆕" if not ds or ds == "قيد الانتظار" else "🔵"
 
-            with st.expander(
-                f"{icon}  {onum}  ←  {cname}    [الحالة: {ostatus}]",
-                expanded=False
-            ):
-                st.subheader(f"📋 تفاصيل الطلب  #{onum}")
+            with st.expander(f"{icon}  {onum}  ←  {cname}  [{ostatus}]"):
+                st.subheader(f"📋 {onum}")
                 c1, c2 = st.columns(2)
                 c1.markdown(f"**👤 العميل:**  {cname}")
-                c1.markdown(f"**📦 الكمية:**  {r.get('quantity', '—')}")
-                c1.markdown(f"**📐 القياس:**  {r.get('size', '—')}")
-                c1.markdown(f"**🏪 النشاط:** {r.get('paper_type', '—')}")
-                c2.markdown(f"**📅 التاريخ:** {str(r.get('created_at', '—'))[:16]}")
-                c2.markdown(f"**👨 أضافه:**  {r.get('created_by_name', '—')}")
+                c1.markdown(f"**📦 الكمية:**  {r.get('quantity','—')}")
+                c1.markdown(f"**📐 القياس:**  {r.get('size','—')}")
+                c1.markdown(f"**🏪 النشاط:** {r.get('paper_type','—')}")
+                c2.markdown(f"**📅 التاريخ:** {str(r.get('created_at','—'))[:16]}")
+                c2.markdown(f"**👨 أضافه:**  {r.get('created_by_name','—')}")
                 c2.markdown(f"**📊 الحالة:**  {ostatus}")
-                c2.markdown(f"**📞 الهاتف:**  {r.get('customer_phone', '—')}")
+                c2.markdown(f"**📞 الهاتف:**  {r.get('customer_phone','—')}")
                 if r.get("description"):
                     st.info(f"📝 {r['description']}")
                 st.markdown("---")
 
                 upld = st.file_uploader(
-                    "⬆️ اختر ملف التصميم (PDF, PNG, AI, PSD, CDR…)",
+                    "⬆️ اختر ملف التصميم (PDF, PNG, AI, PSD…)",
                     key=f"du_{oid}",
-                    type=["pdf","png","jpg","jpeg","ai","psd",
-                          "svg","eps","zip","cdr","webp"],
-                )
-                dl = st.text_input(
-                    "🔗 أو أدخل رابط التصميم",
-                    value=(r.get("design_link") or ""),
-                    key=f"dl_{oid}"
-                )
-                notes = st.text_area(
-                    "📝 ملاحظات للإنتاج",
-                    value=(r.get("design_notes") or ""),
-                    key=f"dn_{oid}",
-                    height=70,
-                )
+                    type=["pdf","png","jpg","jpeg","ai","psd","svg","eps","zip","cdr","webp"])
+                dl    = st.text_input("🔗 أو رابط التصميم",
+                                      value=(r.get("design_link") or ""), key=f"dl_{oid}")
+                notes = st.text_area("📝 ملاحظات للإنتاج",
+                                     value=(r.get("design_notes") or ""),
+                                     key=f"dn_{oid}", height=70)
 
-                if st.button(
-                    "✅ تأكيد رفع التصميم وإرساله للإنتاج",
-                    key=f"dok_{oid}",
-                    use_container_width=True
-                ):
+                if st.button("✅ تأكيد رفع التصميم وإرساله للإنتاج",
+                             key=f"dok_{oid}", use_container_width=True):
                     file_url   = ""
                     store_path = (r.get("design_storage_path") or "")
-
                     if upld:
-                        with st.spinner("⬆️ جاري رفع الملف إلى Supabase Storage…"):
+                        with st.spinner("⬆️ جاري رفع الملف…"):
                             file_url, store_path = _upload(
                                 upld.read(), upld.name,
                                 upld.type or "application/octet-stream",
-                                subfolder="designs"
-                            )
+                                subfolder="designs")
                         if not file_url:
-                            st.error("❌ فشل رفع الملف. تحقق من الاتصال.")
+                            st.error("❌ فشل رفع الملف."); st.stop()
                     else:
                         file_url = (r.get("design_file_url") or "")
-
                     link = dl.strip() or (r.get("design_link") or "")
-
                     if not file_url and not link:
                         st.error("⚠️ يجب رفع ملف أو إدخال رابط التصميم.")
                     else:
@@ -2348,24 +2287,18 @@ def pg_design():
                         })
                         if ok:
                             _push_notification(
-                                WID,
+                                wid(),
                                 f"🎨 تصميم جاهز: {onum}",
                                 f"العميل: {cname} — يمكنكم البدء بالطباعة الآن",
-                                target_roles=["production", "admin"],
-                                order_id=oid
-                            )
+                                target_roles=["production","admin"],
+                                order_id=oid)
                             _get_cached.clear()
-                            st.success(
-                                f"✅ تم رفع التصميم بنجاح! "
-                                f"الطلب **{onum}** انتقل لقسم الإنتاج.")
+                            st.success(f"✅ تم رفع التصميم! الطلب {onum} انتقل للإنتاج.")
                             st.rerun()
                         else:
-                            st.error(
-                                "❌ فشل تحديث الطلب في Supabase. "
-                                "تأكد من تعطيل RLS: "
-                                "ALTER TABLE orders DISABLE ROW LEVEL SECURITY;")
+                            st.error("❌ فشل تحديث الطلب. "
+                                     "شغّل: ALTER TABLE orders DISABLE ROW LEVEL SECURITY;")
 
-    # ─────────────────────────────────────────────────────────────────────
     with t2:
         if not done:
             st.info("لا توجد تصاميم مكتملة بعد.")
@@ -2379,8 +2312,7 @@ def pg_design():
                         f'&nbsp;{bdg("جاهز للطباعة")}'
                         f'<br><small style="color:var(--t3)">'
                         f'🗓 {str(r.get("design_updated","—"))[:16]}'
-                        f' | 👤 {r.get("design_by","—")}'
-                        f'</small></div>',
+                        f' | 👤 {r.get("design_by","—")}</small></div>',
                         unsafe_allow_html=True)
                 with co2:
                     fu = (r.get("design_file_url") or r.get("design_link") or "")
@@ -2397,454 +2329,6 @@ def pg_design():
                         st.success("✅ تم الحذف.")
                         st.rerun()
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  PRODUCTION PAGE
-# ══════════════════════════════════════════════════════════════════════════════
-
-def pg_production():
-    hdr("🖨️","قسم الإنتاج — Z-ORDER V2","نفّذ الأوردرات الجاهزة")
-    guide("① الأوردر يظهر هنا فقط بعد رفع التصميم<br>"
-          "② حمّل ملف التصميم واطبع<br>"
-          "③ 'إتمام الطباعة وحذف الملف' يُكمل الطلب ويحذف الملف فيزيائياً من Storage لتوفير المساحة")
-    WID   = wid()
-    rows  = _get("orders",{"workspace_id":WID},order="id.desc")
-    ready  = [r for r in rows if r.get("design_status")=="مكتمل" and r.get("production_status")=="قيد الانتظار"]
-    prting = [r for r in rows if r.get("production_status")=="جاري الإنتاج"]
-    done   = [r for r in rows if r.get("production_status")=="مكتمل"]
-
-    t1,t2,t3 = st.tabs([f"🟢 جاهز ({len(ready)})",f"🟠 جاري ({len(prting)})",f"✅ مكتمل ({len(done)})"])
-
-    def _complete_and_delete(order_row, pn=""):
-        """Mark order as done AND delete design file from Storage."""
-        _patch("orders",{"id":order_row["id"]},{
-            "production_status":"مكتمل",
-            "production_notes":pn,
-            "production_updated":_ts(),
-            "production_by":st.session_state["uname"],
-            "status":"جاهز للتسليم",
-            "design_file_url":"",          # clear URL from record
-            "design_storage_path":"",      # clear path from record
-        })
-        # Delete file physically from Storage
-        sp = order_row.get("design_storage_path","")
-        if sp:
-            deleted = _storage_delete(sp)
-            if deleted:
-                st.success("🗑️ ملف التصميم حُذف من Storage — تم توفير المساحة.")
-        _push_notification(WID,
-                           f"جاهز للتسليم: {order_row.get('order_number','')}",
-                           f"العميل: {order_row.get('customer_name','')}",
-                           target_roles=["admin","sales","agent"],
-                           order_id=order_row["id"])
-        _get_cached.clear()
-
-    with t1:
-        if not ready: st.info("⏳ لا توجد أوردرات جاهزة. انتظر إتمام التصميم.")
-        for r in ready:
-            with st.expander(f"🟢 {r.get('order_number','')}  —  {r.get('customer_name','')}"):
-                c1,c2 = st.columns(2)
-                c1.markdown(f"**النشاط:** {r.get('paper_type','')} · {r.get('size','')}")
-                c1.markdown(f"**الكمية:** {r.get('quantity','')}")
-                c2.markdown(f"**ملاحظات التصميم:** {r.get('design_notes','—')}")
-                c2.markdown(f"**صمّمه:** {r.get('design_by','—')}")
-
-                # زر تحميل الملف
-                fu = r.get("design_file_url","") or r.get("design_link","")
-                if fu: _dl_btn(fu,"⬇️ تحميل ملف التصميم للطباعة")
-
-                pn = st.text_area("📝 ملاحظات الإنتاج", key=f"pn_{r['id']}", height=55)
-
-                col1, col2, col3 = st.columns(3)
-                if col1.button("▶️ بدء الطباعة", key=f"st_{r['id']}"):
-                    _patch("orders",{"id":r["id"]},{
-                        "production_status":"جاري الإنتاج","production_notes":pn,
-                        "production_updated":_ts(),"production_by":st.session_state["uname"],
-                        "status":"جاري الإنتاج"})
-                    _push_notification(WID,f"بدأت طباعة: {r.get('order_number','')}",
-                                       f"العميل: {r.get('customer_name','')}",
-                                       target_roles=["admin","sales"],order_id=r["id"])
-                    _get_cached.clear(); st.success("▶️ بدأ الإنتاج!"); st.rerun()
-
-                if col2.button("✅ إتمام مباشر", key=f"fi_{r['id']}"):
-                    _complete_and_delete(r, pn)
-                    st.success("✅ اكتمل — إشعار أُرسل!"); st.rerun()
-
-                # زر أحمر: إتمام الطباعة وحذف الملف فيزيائياً
-                st.markdown(
-                    '<style>.del-btn button{background:linear-gradient(135deg,#ef4444,#b91c1c)'
-                    '!important;}</style><div class="del-btn">',
-                    unsafe_allow_html=True)
-                if col3.button("🗑️ إتمام وحذف الملف", key=f"delprt_{r['id']}",
-                               help="يُكمل الطلب ويحذف ملف التصميم نهائياً من Storage"):
-                    _complete_and_delete(r, pn)
-                    st.success("✅ مكتمل — الملف حُذف من Storage لتوفير المساحة!"); st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
-
-    with t2:
-        if not prting: st.info("لا توجد طباعة جارية.")
-        for r in prting:
-            with st.expander(f"🟠 {r.get('order_number','')}  —  {r.get('customer_name','')}"):
-                st.markdown(f"**النشاط:** {r.get('paper_type','')} · {r.get('size','')} | **الكمية:** {r.get('quantity','')}")
-                fu = r.get("design_file_url","") or r.get("design_link","")
-                if fu: _dl_btn(fu,"⬇️ تحميل")
-
-                col1, col2 = st.columns(2)
-                if col1.button("✅ تحديد كمكتمل", key=f"fn_{r['id']}"):
-                    _patch("orders",{"id":r["id"]},{
-                        "production_status":"مكتمل","production_updated":_ts(),
-                        "status":"جاهز للتسليم"})
-                    _push_notification(WID,f"جاهز للتسليم: {r.get('order_number','')}",
-                                       f"العميل: {r.get('customer_name','')}",
-                                       target_roles=["admin","sales","agent"],order_id=r["id"])
-                    _get_cached.clear(); st.success("✅ مكتمل!"); st.rerun()
-
-                st.markdown(
-                    '<style>.del-btn2 button{background:linear-gradient(135deg,#ef4444,#b91c1c)'
-                    '!important;}</style><div class="del-btn2">',
-                    unsafe_allow_html=True)
-                if col2.button("🗑️ إتمام وحذف الملف", key=f"delprt2_{r['id']}",
-                               help="يُكمل الطلب ويحذف ملف التصميم نهائياً من Storage"):
-                    _complete_and_delete(r)
-                    st.success("✅ مكتمل — الملف حُذف من Storage!"); st.rerun()
-                st.markdown('</div>', unsafe_allow_html=True)
-
-    with t3:
-        if not done: st.info("لا توجد أوردرات مكتملة.")
-        for r in done:
-            file_deleted = not bool(r.get("design_file_url","") or r.get("design_storage_path",""))
-            st.markdown(
-                f'<div class="card"><b>{r.get("order_number","")}</b> — {r.get("customer_name","")}'
-                f'&nbsp;{bdg(r.get("status","مكتمل"))}'
-                f'&nbsp;{"🗑️ <small style=\"color:var(--t3)\">ملف محذوف</small>" if file_deleted else ""}'
-                f'<br><small style="color:var(--t3)">اكتمل: {str(r.get("production_updated","—"))[:16]}'
-                f' | {r.get("production_by","—")}</small></div>',
-                unsafe_allow_html=True)
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  SHARED PAGES (Purchase · Agent · Chat · Incidents · Financial)
-# ══════════════════════════════════════════════════════════════════════════════
-
-def pg_purchase_submit():
-    hdr("📦","طلب شراء","اطلب مواد من قسم المشتريات")
-    with st.form("pur", clear_on_submit=True):
-        c1,c2 = st.columns(2)
-        item  = c1.text_input("اسم الصنف *",  placeholder="حبر أسود، ورق A3...")
-        qty   = c2.text_input("الكمية *",      placeholder="5 علب...")
-        urg   = st.selectbox("الأولوية", ["عادي","عاجل","طارئ"])
-        notes = st.text_area("ملاحظات", height=65)
-        sub   = st.form_submit_button("📤 إرسال", use_container_width=True)
-    if sub:
-        if not item.strip() or not qty.strip(): st.error("يرجى تحديد الصنف والكمية.")
-        else:
-            role = st.session_state["role"]
-            res  = _post("purchase_requests",{
-                "workspace_id":wid(),"requester_id":st.session_state["uid"],
-                "requester_name":st.session_state["uname"],"department":ROLES[role]["ar"],
-                "item_name":item.strip(),"quantity":qty.strip(),
-                "urgency":urg,"notes":notes.strip(),"status":"قيد المراجعة"})
-            if res:
-                _push_notification(wid(),f"طلب شراء جديد: {item.strip()}",
-                                   f"من {st.session_state['uname']} | {urg}",
-                                   target_roles=["purchase","admin"])
-                st.success("✅ تم إرسال طلب الشراء!")
-    st.markdown("---")
-    rows = _get("purchase_requests",{"workspace_id":wid(),"requester_id":st.session_state["uid"]},
-                order="id.desc",limit=10)
-    if rows:
-        df = pd.DataFrame(rows)[["item_name","quantity","urgency","status","created_at"]]
-        st.dataframe(df.rename(columns={"item_name":"الصنف","quantity":"الكمية",
-                                        "urgency":"الأولوية","status":"الحالة","created_at":"التاريخ"}),
-                     use_container_width=True, hide_index=True)
-    else: st.info("لم تقدم أي طلب بعد.")
-
-
-def pg_purchase_manage():
-    hdr("📦","إدارة طلبات الشراء","راجع وأدر جميع الطلبات")
-    WID  = wid()
-    rows = _get("purchase_requests",{"workspace_id":WID},order="id.desc")
-    rows = sorted(rows, key=lambda r: {"طارئ":0,"عاجل":1,"عادي":2}.get(r.get("urgency","عادي"),2))
-    pend = [r for r in rows if r.get("status")=="قيد المراجعة"]
-    rest = [r for r in rows if r.get("status")!="قيد المراجعة"]
-    t1,t2 = st.tabs([f"⏳ قيد المراجعة ({len(pend)})", f"📋 السجل ({len(rest)})"])
-    with t1:
-        if not pend: st.success("🎉 لا توجد طلبات معلقة!")
-        for r in pend:
-            uc = {"طارئ":"var(--red)","عاجل":"var(--acc2)","عادي":"var(--t2)"}.get(r.get("urgency","عادي"),"var(--t2)")
-            with st.expander(f"📦 {r.get('item_name','')} — {r.get('requester_name','')} [{r.get('department','')}]"):
-                st.markdown(
-                    f"**الصنف:** {r.get('item_name','')} | **الكمية:** {r.get('quantity','')}"
-                    f"<br>**الأولوية:** <span style='color:{uc}'>{r.get('urgency','')}</span>"
-                    f" | **التاريخ:** {str(r.get('created_at',''))[:16]}"
-                    f"{'<br>**ملاحظات:** '+r.get('notes','') if r.get('notes') else ''}",
-                    unsafe_allow_html=True)
-                col1,col2 = st.columns(2)
-                if col1.button("✅ موافقة", key=f"app_{r['id']}"):
-                    _patch("purchase_requests",{"id":r["id"]},
-                           {"status":"موافق عليه","reviewed_by":st.session_state["uname"],"reviewed_at":_ts()})
-                    st.success("✅ موافق."); _get_cached.clear(); st.rerun()
-                if col2.button("❌ رفض", key=f"rej_{r['id']}"):
-                    _patch("purchase_requests",{"id":r["id"]},
-                           {"status":"مرفوض","reviewed_by":st.session_state["uname"],"reviewed_at":_ts()})
-                    st.warning("تم الرفض."); _get_cached.clear(); st.rerun()
-    with t2:
-        if not rest: st.info("لا يوجد سجل.")
-        else:
-            df = pd.DataFrame(rest)[["requester_name","department","item_name",
-                                     "quantity","urgency","status","reviewed_by","created_at"]]
-            st.dataframe(df.rename(columns={"requester_name":"الموظف","department":"القسم",
-                                            "item_name":"الصنف","quantity":"الكمية","urgency":"الأولوية",
-                                            "status":"الحالة","reviewed_by":"راجعه","created_at":"التاريخ"}),
-                         use_container_width=True, hide_index=True)
-
-
-def pg_agent_new():
-    hdr("🗺️","تسجيل زيارة عميل","وثّق زيارتك الميدانية")
-    with st.form("av", clear_on_submit=True):
-        cust  = st.text_input("👤 اسم العميل / المحل *")
-        loc   = st.text_input("📍 العنوان", placeholder="الشارع، الحي، المدينة")
-        vs    = st.selectbox("📊 حالة العميل", ["محتمل","اشترى","لن يشتري"])
-        notes = st.text_area("📝 ملاحظات", height=65)
-        img   = st.file_uploader("📸 صورة المحل أو الوصل",
-                                  type=["jpg","jpeg","png","webp"],
-                                  help="يُرفع إلى Supabase Storage")
-        sub   = st.form_submit_button("✅ حفظ الزيارة", use_container_width=True)
-    if sub:
-        if not cust.strip(): st.error("يرجى إدخال اسم العميل.")
-        else:
-            img_url = ""
-            if img:
-                with st.spinner("رفع الصورة..."):
-                    img_url, _ = _upload(img.read(),
-                                         img.name,
-                                         img.type or "image/jpeg",
-                                         subfolder="agents")
-            res = _post("agent_visits",{
-                "workspace_id":wid(),"agent_id":st.session_state["uid"],
-                "agent_name":st.session_state["uname"],"customer_name":cust.strip(),
-                "location":loc.strip(),"visit_status":vs,"notes":notes.strip(),"image_path":img_url})
-            if res: st.success(f"✅ تم تسجيل زيارة **{cust.strip()}**!")
-
-
-def pg_agent_my():
-    hdr("📋","زياراتي","سجل زياراتك")
-    rows = _get("agent_visits",
-                {"workspace_id":wid(),"agent_id":st.session_state["uid"]},order="id.desc")
-    if not rows: st.info("لم تسجّل أي زيارة بعد."); return
-    for r in rows:
-        c, l = AGT_MAP.get(r.get("visit_status","محتمل"),("b-apot","🔵"))
-        ih = ""
-        ip = r.get("image_path","")
-        if ip and ip.startswith("http"):
-            try:
-                ir = requests.get(ip, timeout=10)
-                if ir.status_code == 200:
-                    b64 = base64.b64encode(ir.content).decode()
-                    ct  = ir.headers.get("content-type","image/jpeg")
-                    ih  = (f'<br><img src="data:{ct};base64,{b64}" '
-                           f'style="max-width:100%;max-height:150px;border-radius:8px;'
-                           f'margin-top:.35rem;object-fit:cover">')
-            except Exception: pass
-        st.markdown(
-            f'<div class="card"><b>{r.get("customer_name","")}</b>'
-            f'&nbsp;<span class="badge {c}">{l}</span>'
-            f'<br><small style="color:var(--t2)">📍 {r.get("location","—")} | 🗓 {str(r.get("visited_at",""))[:16]}</small>'
-            f'{"<br><small>"+r.get("notes","")+"</small>" if r.get("notes") else ""}'
-            f'{ih}</div>', unsafe_allow_html=True)
-
-
-def pg_agent_reports():
-    hdr("🗺️","تقارير المندوبين","أداء فريق المبيعات الميداني")
-    visits = _get("agent_visits",{"workspace_id":wid()})
-    if not visits: st.info("لا توجد زيارات."); return
-    ag = {}
-    for v in visits:
-        n = v.get("agent_name","")
-        ag.setdefault(n,{"الزيارات":0,"اشترى":0,"محتمل":0,"لن يشتري":0,"آخر زيارة":""})
-        ag[n]["الزيارات"]+=1
-        vs = v.get("visit_status","محتمل")
-        ag[n][vs] = ag[n].get(vs,0)+1
-        if str(v.get("visited_at","")) > ag[n]["آخر زيارة"]:
-            ag[n]["آخر زيارة"] = str(v.get("visited_at",""))[:16]
-    st.dataframe(pd.DataFrame([{"المندوب":k,**v} for k,v in ag.items()]),
-                 use_container_width=True, hide_index=True)
-
-
-def pg_chat():
-    hdr("💬","محادثة الفريق — Z-ORDER V2","معزولة لشركتك · يدعم @تاغ الأقسام")
-    guide("① اكتب @المبيعات أو @التصميم أو @الإنتاج لإرسال إشعار للقسم المعني<br>"
-          "② الأصوات والإشعارات تعمل على المتصفح وتطبيق PWA<br>"
-          "③ المحادثة معزولة — لا يراها موظفو شركات أخرى")
-    WID = wid(); uid = st.session_state["uid"]
-
-    # ── إشعار صوتي للرسائل الجديدة (يُشغَّل عبر JS bridge) ──────────────────
-    st.markdown(
-        '<script>if(window.zPlayBeep) window.zPlayBeep(660,120);</script>',
-        unsafe_allow_html=True)
-
-    with st.form("cf", clear_on_submit=True):
-        msg  = st.text_input(
-            "✍️ اكتب رسالتك...",
-            placeholder="مثال: @التصميم ملف الكارت جاهز للمراجعة")
-        sent = st.form_submit_button("إرسال ←", use_container_width=True)
-
-    if sent and msg.strip():
-        _post("chat_messages",{"workspace_id":WID,"sender_id":uid,
-                               "sender_name":st.session_state["uname"],
-                               "sender_role":st.session_state["role"],
-                               "message":msg.strip()})
-
-        # ── @mention detection → push notification to tagged role ──────────
-        MENTION_MAP = {
-            "@المبيعات":  "sales",    "@sales":    "sales",
-            "@التصميم":   "design",   "@design":   "design",
-            "@الإنتاج":   "production","@production":"production",
-            "@المشتريات": "purchase", "@purchase": "purchase",
-            "@المندوب":   "agent",    "@agent":    "agent",
-            "@المدير":    "admin",    "@admin":    "admin",
-        }
-        tagged_roles = []
-        for tag, role in MENTION_MAP.items():
-            if tag in msg:
-                tagged_roles.append(role)
-        if tagged_roles:
-            _push_notification(
-                WID,
-                f"📢 تاغ من {st.session_state['uname']}",
-                msg.strip()[:100],
-                target_roles=tagged_roles,
-            )
-            # trigger browser notification via JS
-            st.markdown(
-                f'<script>if(window.zCheckMention) '
-                f'window.zCheckMention({repr(msg.strip())}, '
-                f'{repr(st.session_state["role"])});</script>',
-                unsafe_allow_html=True)
-
-        _get_cached.clear(); st.rerun()
-
-    msgs = _get("chat_messages",{"workspace_id":WID},order="id.desc",limit=60)
-    msgs.reverse()
-    if not msgs: st.info("لا توجد رسائل. ابدأ المحادثة!"); return
-    st.markdown('<div class="chat-wrap">', unsafe_allow_html=True)
-    for m in msgs:
-        is_me = m.get("sender_id") == uid
-        ri    = ROLES.get(m.get("sender_role",""),{"clr":"#e8a020"})
-        cls   = "me" if is_me else "other"
-        st.markdown(
-            f'<div class="bubble {cls}">'
-            f'<div class="bn" style="color:{ri["clr"]}">'
-            f'{m.get("sender_name","")} · {ROLES.get(m.get("sender_role",""),{"ar":""})["ar"]}</div>'
-            f'{m.get("message","")}'
-            f'<div class="bt">{str(m.get("sent_at",""))[:16]}</div>'
-            f'</div>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
-
-
-def pg_incident_submit():
-    role = st.session_state["role"]
-    hdr("🚨","بلاغ خلل أو نقص","أبلغ المدير عن أي مشكلة")
-    with st.form("inc", clear_on_submit=True):
-        desc = st.text_area("📝 وصف المشكلة *", placeholder="نقص حبر، عطل طابعة...")
-        sev  = st.selectbox("⚠️ الخطورة", ["منخفض","متوسط","عالي"])
-        sub  = st.form_submit_button("📤 إرسال", use_container_width=True)
-    if sub:
-        if not desc.strip(): st.error("يرجى كتابة الوصف.")
-        else:
-            res = _post("incident_reports",{
-                "workspace_id":wid(),"reporter_id":st.session_state["uid"],
-                "reporter_name":st.session_state["uname"],"department":ROLES[role]["ar"],
-                "description":desc.strip(),"severity":sev,"status":"مفتوح"})
-            if res:
-                _push_notification(wid(),f"بلاغ {sev}: من {ROLES[role]['ar']}",
-                                   desc.strip()[:80],target_roles=["admin"])
-                st.success("✅ تم إرسال البلاغ للمدير!")
-    rows = _get("incident_reports",{"workspace_id":wid(),"reporter_id":st.session_state["uid"]},
-                order="id.desc",limit=8)
-    if rows:
-        df = pd.DataFrame(rows)[["description","severity","status","created_at"]]
-        st.dataframe(df.rename(columns={"description":"الوصف","severity":"الخطورة",
-                                        "status":"الحالة","created_at":"التاريخ"}),
-                     use_container_width=True, hide_index=True)
-
-
-def pg_all_incidents():
-    hdr("🚨","بلاغات الأعطال","جميع البلاغات الواردة")
-    rows = _get("incident_reports",{"workspace_id":wid()},order="id.desc")
-    if not rows: st.success("🎉 لا توجد بلاغات!"); return
-    op = [r for r in rows if r.get("status")=="مفتوح"]
-    rs = [r for r in rows if r.get("status")!="مفتوح"]
-    t1,t2 = st.tabs([f"🔴 مفتوحة ({len(op)})",f"✅ محلولة ({len(rs)})"])
-    for tab,lst in [(t1,op),(t2,rs)]:
-        with tab:
-            if not lst: st.info("لا توجد."); continue
-            for r in lst:
-                sc,sl = SEV_MAP.get(r.get("severity","متوسط"),("b-sev-md","🟡"))
-                with st.expander(f'{sl} {r.get("severity","")}  —  {r.get("department","")}  —  {str(r.get("created_at",""))[:16]}'):
-                    st.markdown(f"**المبلّغ:** {r.get('reporter_name','')}<br>**الوصف:** {r.get('description','')}",
-                                unsafe_allow_html=True)
-                    if r.get("status")=="مفتوح":
-                        if st.button("✅ محلول", key=f"rs_{r['id']}"):
-                            _patch("incident_reports",{"id":r["id"]},
-                                   {"status":"محلول","resolved_at":_ts()})
-                            _get_cached.clear(); st.rerun()
-                    else: st.caption(f"تم الحل: {str(r.get('resolved_at',''))[:16]}")
-
-
-def pg_financial():
-    hdr("💰","التقارير المالية","للمبيعات ومدير الشركة فقط")
-    WID   = wid()
-    rows  = _get("orders",{"workspace_id":WID},order="id.desc")
-    tv    = sum(float(o.get("total_price",0) or 0) for o in rows)
-    paid  = sum(float(o.get("paid",0)        or 0) for o in rows)
-    rem   = sum(float(o.get("remaining",0)   or 0) for o in rows)
-    cnt   = len(rows)
-    avg   = tv/cnt if cnt else 0
-    c1,c2,c3,c4 = st.columns(4)
-    c1.metric("إجمالي القيمة (د.ع)",  f"{tv:,.0f}")
-    c2.metric("إجمالي المدفوع (د.ع)", f"{paid:,.0f}")
-    c3.metric("إجمالي المتبقي (د.ع)", f"{rem:,.0f}")
-    c4.metric("متوسط الأوردر (د.ع)",  f"{avg:,.0f}")
-    st.markdown("---")
-    if not rows: st.info("لا توجد أوردرات."); return
-    df = pd.DataFrame(rows)[["order_number","customer_name","paper_type","size",
-                              "quantity","total_price","paid","remaining","status","delivery_date","created_at"]]
-    st.dataframe(df.rename(columns={
-        "order_number":"الأوردر","customer_name":"العميل","paper_type":"الورق","size":"القياس",
-        "quantity":"الكمية","total_price":"السعر الكلي","paid":"المدفوع","remaining":"المتبقي",
-        "status":"الحالة","delivery_date":"التسليم","created_at":"التاريخ"
-    }), use_container_width=True, hide_index=True)
-    ws_name = st.session_state.get("workspace_name","")
-    header  = (f"Z-ORDER — تقرير مالي\nWorkspace: {ws_name}\n"
-               f"Developed by: {DEVELOPER}\nتاريخ: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n")
-    st.download_button("⬇️ تصدير CSV",
-        (header+df.to_csv(index=False)).encode("utf-8-sig"),
-        file_name=f"zorder_financial_{datetime.date.today()}.csv",
-        mime="text/csv", use_container_width=True)
-
-
-def pg_generic_dash(role):
-    hdr("📊","لوحتي","نظرة عامة")
-    WID   = wid()
-    rows  = _get("orders",{"workspace_id":WID})
-    tot   = len(rows)
-    nw    = sum(1 for o in rows if o.get("status")=="جديد")
-    ip    = sum(1 for o in rows if o.get("production_status")=="جاري الإنتاج")
-    dn    = sum(1 for o in rows if o.get("status")=="تم التسليم")
-    c1,c2,c3,c4 = st.columns(4)
-    c1.metric("إجمالي",tot); c2.metric("جديدة",nw); c3.metric("جاري",ip); c4.metric("مُسلَّمة",dn)
-    st.markdown("---")
-    recent = sorted(rows,key=lambda x:x.get("id",0),reverse=True)[:10]
-    if recent:
-        df = pd.DataFrame(recent)[["order_number","customer_name","paper_type","size","quantity","status","created_at"]]
-        st.dataframe(df.rename(columns={"order_number":"الأوردر","customer_name":"العميل",
-                                        "paper_type":"الورق","size":"القياس","quantity":"الكمية",
-                                        "status":"الحالة","created_at":"التاريخ"}),
-                     use_container_width=True, hide_index=True)
-
-# ══════════════════════════════════════════════════════════════════════════════
-#  DESIGN: MOCKUP UPLOAD — visible to sales only for approval
-# ══════════════════════════════════════════════════════════════════════════════
 
 def pg_design_mockup():
     hdr("🖼️","رفع Mockup للمراجعة","ارفع صورة Mockup للتصميم — تظهر لقسم المبيعات فقط للاعتماد")
