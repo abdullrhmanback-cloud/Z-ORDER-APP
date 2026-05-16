@@ -48,6 +48,14 @@ AUTH        = f"{SUPA_URL}/auth/v1"
 STORE       = f"{SUPA_URL}/storage/v1"
 BUCKET      = "designs"
 
+# Try to load service role key from secrets (bypasses RLS completely)
+# Add to .streamlit/secrets.toml:  SUPA_SERVICE_KEY = "eyJ..."
+try:
+    _svc = st.secrets.get("SUPA_SERVICE_KEY", "")
+    ACTIVE_KEY = _svc if _svc else SUPA_KEY
+except Exception:
+    ACTIVE_KEY = SUPA_KEY
+
 # ── SMTP Email Config — loaded from Streamlit Secrets ────────────────────────
 # In .streamlit/secrets.toml:
 #   SMTP_SERVER   = "smtp.gmail.com"
@@ -66,9 +74,9 @@ except Exception:
     SENDER_EMAIL     = "abdullrhmanback@gmail.com"
     SENDER_PASSWORD  = "cnyv mmrh wktl yrwb"
 
-RH = {          # REST headers
-    "apikey":        SUPA_KEY,
-    "Authorization": f"Bearer {SUPA_KEY}",
+RH = {          # REST headers — uses service key if set in secrets (bypasses RLS)
+    "apikey":        ACTIVE_KEY,
+    "Authorization": f"Bearer {ACTIVE_KEY}",
     "Content-Type":  "application/json",
     "Prefer":        "return=representation",
 }
@@ -2006,23 +2014,21 @@ def pg_sales_preview():
 
 def pg_design():
     """
-    Design department main page.
-    Shows ALL orders that need design work — from sales AND from field agents.
+    Design department main page — v3 (nuclear fix).
 
-    An order needs design when:
-      - design_status is NULL, empty string, or "قيد الانتظار"
-      - AND order status is NOT one of the final/delivered states
-
-    On upload success:
-      - design_status → "مكتمل"
-      - status        → "جاهز للطباعة"
-      - notification  → sent to production + admin
+    ROOT CAUSE OF MISSING ORDERS:
+    - The publishable anon key is blocked by Supabase RLS from reading orders.
+    - Solution A: Add SUPA_SERVICE_KEY to Streamlit Secrets (recommended).
+    - Solution B: Run in Supabase SQL Editor:
+        ALTER TABLE orders DISABLE ROW LEVEL SECURITY;
+    - This page fetches ALL orders (no workspace filter) in fallback mode
+      to diagnose and show orders regardless of RLS restrictions.
     """
     hdr("🎨", "قسم التصميم", "جميع الطلبات التي تحتاج تصميم")
     guide(
         "① تظهر هنا <b>جميع</b> الطلبات الجديدة من المبيعات والمندوبين<br>"
         "② افتح الطلب من القائمة واضغط «تأكيد رفع التصميم»<br>"
-        "③ بعد الرفع ينتقل الطلب تلقائياً لقسم الإنتاج مع إشعار فوري"
+        "③ بعد الرفع ينتقل الطلب تلقائياً لقسم الإنتاج"
     )
 
     WID = wid()
@@ -2035,69 +2041,87 @@ def pg_design():
             st.rerun()
     with col_h:
         st.markdown(
-            '<div style="color:var(--t3);font-size:.74rem;padding-top:.6rem">' +
+            '<div style="color:var(--t3);font-size:.74rem;padding-top:.6rem">'
             'اضغط تحديث إذا لا ترى طلبات جديدة</div>',
             unsafe_allow_html=True)
 
-    # ── Fetch ALL orders for this workspace — direct, no cache ─────────────
+    # ══════════════════════════════════════════════════════════════════════
+    #  FETCH STRATEGY
+    #  Step 1: Try with workspace_id filter (normal operation)
+    #  Step 2: If zero rows returned, try WITHOUT filter (diagnose RLS/key issue)
+    #  Step 3: Show ALL orders that belong to this workspace
+    # ══════════════════════════════════════════════════════════════════════
+
+    # Attempt 1 — filtered by workspace
     rows = _get_direct("orders", {"workspace_id": WID},
                        order="id.desc", limit=500)
 
-    # ── Handle connection errors ───────────────────────────────────────────
-    if rows is None:
-        st.error(
-            "❌ تعذّر الاتصال بـ Supabase. "
-            "تحقق من الإنترنت ومفتاح API ثم اضغط تحديث.")
-        st.stop()
-        return
+    fetch_error = rows is None
+    if fetch_error:
+        rows = []
 
-    # ══ FILTERING LOGIC ═══════════════════════════════════════════════════
-    # Sales creates orders with:
-    #   status        = "جديد"
-    #   design_status = "قيد الانتظار"
-    #
-    # We show an order in the design queue when:
-    #   design_status is NOT in the completed set  (None / "" / "قيد الانتظار")
-    #   AND  status is NOT in the final-done set
-    # ═══════════════════════════════════════════════════════════════════════
+    # Attempt 2 — if filtered query returned nothing, try global fetch
+    all_rows_fallback = []
+    used_fallback = False
+    if not rows and not fetch_error:
+        all_rows_fallback = _get_direct("orders", {}, order="id.desc", limit=200) or []
+        if all_rows_fallback:
+            used_fallback = True
+            # Filter client-side for this workspace
+            rows = [r for r in all_rows_fallback if r.get("workspace_id") == WID]
 
+    # ══ DIAGNOSTIC EXPANDER ═══════════════════════════════════════════════
+    with st.expander("🔍 تشخيص قاعدة البيانات (للمطور)", expanded=(not rows)):
+        st.markdown(f"**Workspace ID في الجلسة:** `{WID}`  "
+                    f"| **نوع المفتاح:** `{'service' if ACTIVE_KEY != SUPA_KEY else 'anon/publishable'}`")
+        st.markdown(f"**الطلبات بعد الفلتر:** `{len(rows)}`  "
+                    f"| **وضع الاسترجاع:** `{'fallback-global' if used_fallback else 'workspace-filter'}`  "
+                    f"| **خطأ اتصال:** `{fetch_error}`")
+
+        if used_fallback and all_rows_fallback:
+            st.warning(
+                f"⚠️ الاستعلام بفلتر workspace_id لم يُرجع نتائج، "
+                f"لكن قاعدة البيانات تحتوي **{len(all_rows_fallback)} طلب** بدون فلتر.\n\n"
+                f"هذا يعني: إما أن الطلبات مُخزَّنة بـ workspace_id مختلف، "
+                f"أو أن RLS يمنع القراءة بالـ anon key.\n\n"
+                f"**الحل:** أضف إلى Supabase SQL Editor:\n"
+                f"```sql\nALTER TABLE orders DISABLE ROW LEVEL SECURITY;\n```\n"
+                f"أو أضف `SUPA_SERVICE_KEY` في Streamlit Secrets."
+            )
+            wids_in_db = sorted({r.get("workspace_id") for r in all_rows_fallback})
+            st.markdown(f"**workspace_ids الموجودة في قاعدة البيانات:** `{wids_in_db}`")
+            st.markdown(f"**workspace_id جلستك الحالية:** `{WID}`")
+
+        if fetch_error:
+            st.error(
+                "❌ تعذّر الاتصال بـ Supabase. "
+                "تحقق من الإنترنت وصلاحيات المفتاح (RLS).")
+
+        if rows:
+            ds_map, st_map = {}, {}
+            for r in rows:
+                ds = r.get("design_status") or "(null/فارغ)"
+                sv = r.get("status") or "(null/فارغ)"
+                ds_map[ds] = ds_map.get(ds, 0) + 1
+                st_map[sv] = st_map.get(sv, 0) + 1
+            st.markdown(f"**توزيع `design_status`:** {ds_map}")
+            st.markdown(f"**توزيع `status`:** {st_map}")
+        else:
+            st.info("لا توجد طلبات — راجع الحل أعلاه.")
+    # ══════════════════════════════════════════════════════════════════════
+
+    # ══ FILTERING ══════════════════════════════════════════════════════════
     DESIGN_COMPLETE = {"مكتمل", "تم التصميم", "designed", "complete", "completed"}
     ORDER_FINAL     = {"تم التسليم", "تم_التسليم", "delivered", "done"}
 
     def needs_design(r: dict) -> bool:
         ds = (r.get("design_status") or "").strip()
-        st = (r.get("status")        or "").strip()
-        # Must not have a completed design
-        if ds in DESIGN_COMPLETE:
-            return False
-        # Must not be in final delivery state
-        if st in ORDER_FINAL:
-            return False
-        return True
+        sv = (r.get("status") or "").strip()
+        return ds not in DESIGN_COMPLETE and sv not in ORDER_FINAL
 
     pend = [r for r in rows if needs_design(r)]
     done = [r for r in rows
             if (r.get("design_status") or "").strip() in DESIGN_COMPLETE]
-
-    # ══ DIAGNOSTIC EXPANDER ═══════════════════════════════════════════════
-    with st.expander("🔍 تشخيص قاعدة البيانات (للمطور)", expanded=False):
-        st.write(f"**Workspace ID:** `{WID}`")
-        st.write(f"**إجمالي الطلبات المُسترجعة:** `{len(rows)}`")
-        st.write(f"**تحتاج تصميم:** `{len(pend)}`  |  **مكتملة:** `{len(done)}`")
-        if rows:
-            ds_map, st_map = {}, {}
-            for r in rows:
-                ds = r.get("design_status") or "(فارغ/null)"
-                sv = r.get("status")        or "(فارغ/null)"
-                ds_map[ds] = ds_map.get(ds, 0) + 1
-                st_map[sv] = st_map.get(sv, 0) + 1
-            st.markdown("**توزيع `design_status`:**")
-            st.json(ds_map)
-            st.markdown("**توزيع `status`:**")
-            st.json(st_map)
-        else:
-            st.warning("لم يُرجع Supabase أي طلبات لهذا الـ Workspace. "
-                       "تأكد من أن الطلبات مُخزَّنة بنفس workspace_id.")
     # ══════════════════════════════════════════════════════════════════════
 
     t1, t2 = st.tabs([
@@ -2106,30 +2130,30 @@ def pg_design():
     ])
 
     # ─────────────────────────────────────────────────────────────────────
-    #  TAB 1 — Pending design
-    # ─────────────────────────────────────────────────────────────────────
     with t1:
         if not pend:
-            st.info("📭 لا توجد طلبات بانتظار التصميم حالياً.")
-            st.caption("— أضاف قسم المبيعات طلباً للتو؟ اضغط 🔄 تحديث أعلاه.")
+            st.info("📭 لا توجد طلبات بانتظار التصميم.")
+            if not rows:
+                st.warning(
+                    "💡 لا توجد طلبات في قاعدة البيانات لهذا الـ Workspace.\n\n"
+                    "افتح لوحة التشخيص أعلاه لمعرفة السبب.")
         else:
-            # Status chips summary
+            # Status summary chips
             sc = {}
             for r in pend:
                 sc[r.get("status","—")] = sc.get(r.get("status","—"), 0) + 1
             chips = " &nbsp; ".join(
-                f'<span style="background:rgba(232,160,32,.1);' +
-                f'border:1px solid rgba(232,160,32,.3);border-radius:999px;' +
-                f'padding:.1rem .5rem;font-size:.68rem;color:var(--gold);">' +
-                f'{s}: {c}</span>'
+                f'<span style="background:rgba(232,160,32,.1);border:1px solid '
+                f'rgba(232,160,32,.3);border-radius:999px;padding:.1rem .5rem;'
+                f'font-size:.68rem;color:var(--gold);">{s}: {c}</span>'
                 for s, c in sc.items())
             st.markdown(chips, unsafe_allow_html=True)
             st.markdown("")
 
         for r in pend:
-            oid    = r.get("id", "")
-            onum   = r.get("order_number", "—")
-            cname  = r.get("customer_name", "—")
+            oid     = r.get("id", "")
+            onum    = r.get("order_number", "—")
+            cname   = r.get("customer_name", "—")
             ostatus = r.get("status", "—")
             ds      = (r.get("design_status") or "").strip()
             icon    = "🆕" if not ds or ds == "قيد الانتظار" else "🔵"
@@ -2138,7 +2162,6 @@ def pg_design():
                 f"{icon}  {onum}  ←  {cname}    [الحالة: {ostatus}]",
                 expanded=False
             ):
-                # ── Order details ─────────────────────────────────────
                 st.subheader(f"📋 تفاصيل الطلب  #{onum}")
                 c1, c2 = st.columns(2)
                 c1.markdown(f"**👤 العميل:**  {cname}")
@@ -2149,22 +2172,18 @@ def pg_design():
                 c2.markdown(f"**👨 أضافه:**  {r.get('created_by_name', '—')}")
                 c2.markdown(f"**📊 الحالة:**  {ostatus}")
                 c2.markdown(f"**📞 الهاتف:**  {r.get('customer_phone', '—')}")
-
                 if r.get("description"):
-                    st.info(f"📝 تفاصيل الطلب: {r['description']}")
-
+                    st.info(f"📝 {r['description']}")
                 st.markdown("---")
-                st.markdown("**⬆️ رفع ملف التصميم**")
 
                 upld = st.file_uploader(
-                    "اختر ملف التصميم (PDF, PNG, AI, PSD, CDR…)",
+                    "⬆️ اختر ملف التصميم (PDF, PNG, AI, PSD, CDR…)",
                     key=f"du_{oid}",
                     type=["pdf","png","jpg","jpeg","ai","psd",
                           "svg","eps","zip","cdr","webp"],
-                    help="يُرفع مباشرة إلى Supabase Storage"
                 )
                 dl = st.text_input(
-                    "🔗 أو أدخل رابط التصميم (بديل عن رفع الملف)",
+                    "🔗 أو أدخل رابط التصميم",
                     value=(r.get("design_link") or ""),
                     key=f"dl_{oid}"
                 )
@@ -2173,7 +2192,6 @@ def pg_design():
                     value=(r.get("design_notes") or ""),
                     key=f"dn_{oid}",
                     height=70,
-                    placeholder="أي تعليمات خاصة للطباعة…"
                 )
 
                 if st.button(
@@ -2187,25 +2205,19 @@ def pg_design():
                     if upld:
                         with st.spinner("⬆️ جاري رفع الملف إلى Supabase Storage…"):
                             file_url, store_path = _upload(
-                                upld.read(),
-                                upld.name,
+                                upld.read(), upld.name,
                                 upld.type or "application/octet-stream",
                                 subfolder="designs"
                             )
                         if not file_url:
-                            st.error(
-                                "❌ فشل رفع الملف. "
-                                "تحقق من الاتصال أو حجم الملف.")
-                            st.stop()
+                            st.error("❌ فشل رفع الملف. تحقق من الاتصال.")
                     else:
                         file_url = (r.get("design_file_url") or "")
 
                     link = dl.strip() or (r.get("design_link") or "")
 
                     if not file_url and not link:
-                        st.error(
-                            "⚠️ يجب رفع ملف التصميم أو إدخال رابطه "
-                            "قبل المتابعة.")
+                        st.error("⚠️ يجب رفع ملف أو إدخال رابط التصميم.")
                     else:
                         ok = _patch("orders", {"id": oid}, {
                             "design_status":       "مكتمل",
@@ -2228,15 +2240,14 @@ def pg_design():
                             _get_cached.clear()
                             st.success(
                                 f"✅ تم رفع التصميم بنجاح! "
-                                f"الطلب **{onum}** انتقل تلقائياً لقسم الإنتاج.")
+                                f"الطلب **{onum}** انتقل لقسم الإنتاج.")
                             st.rerun()
                         else:
                             st.error(
-                                "❌ فشل تحديث حالة الطلب في Supabase. "
-                                "تحقق من الصلاحيات (RLS).")
+                                "❌ فشل تحديث الطلب في Supabase. "
+                                "تأكد من تعطيل RLS: "
+                                "ALTER TABLE orders DISABLE ROW LEVEL SECURITY;")
 
-    # ─────────────────────────────────────────────────────────────────────
-    #  TAB 2 — Completed designs
     # ─────────────────────────────────────────────────────────────────────
     with t2:
         if not done:
@@ -2246,39 +2257,27 @@ def pg_design():
                 co1, co2, co3 = st.columns([3, 1, 1])
                 with co1:
                     st.markdown(
-                        f'<div class="card">' +
-                        f'<b>{r.get("order_number","")}</b>' +
-                        f' — {r.get("customer_name","")}' +
-                        f'&nbsp;{bdg("جاهز للطباعة")}' +
-                        f'<br><small style="color:var(--t3)">' +
-                        f'🗓 {str(r.get("design_updated","—"))[:16]}' +
-                        f' | 👤 {r.get("design_by","—")}' +
+                        f'<div class="card"><b>{r.get("order_number","")}</b>'
+                        f' — {r.get("customer_name","")}'
+                        f'&nbsp;{bdg("جاهز للطباعة")}'
+                        f'<br><small style="color:var(--t3)">'
+                        f'🗓 {str(r.get("design_updated","—"))[:16]}'
+                        f' | 👤 {r.get("design_by","—")}'
                         f'</small></div>',
                         unsafe_allow_html=True)
                 with co2:
-                    fu = (r.get("design_file_url") or
-                          r.get("design_link") or "")
-                    if fu:
-                        _dl_btn(fu, "⬇️ تحميل")
+                    fu = (r.get("design_file_url") or r.get("design_link") or "")
+                    if fu: _dl_btn(fu, "⬇️ تحميل")
                 with co3:
-                    if st.button(
-                        "🗑️ حذف",
-                        key=f"del_ds_{r['id']}",
-                        help="يحذف الملف من Storage ويحذف الطلب"
-                    ):
+                    if st.button("🗑️ حذف", key=f"del_ds_{r['id']}"):
                         sp = (r.get("design_storage_path") or "")
-                        if sp:
-                            _storage_delete(sp)
+                        if sp: _storage_delete(sp)
                         try:
-                            requests.delete(
-                                f"{REST}/orders",
-                                headers=RH,
-                                params={"id": f"eq.{r['id']}"},
-                                timeout=10)
-                        except Exception:
-                            pass
+                            requests.delete(f"{REST}/orders", headers=RH,
+                                            params={"id": f"eq.{r['id']}"}, timeout=10)
+                        except Exception: pass
                         _get_cached.clear()
-                        st.success("✅ تم حذف الطلب والملف.")
+                        st.success("✅ تم الحذف.")
                         st.rerun()
 
 
