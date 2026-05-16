@@ -16,6 +16,9 @@
 # ── Imports ──────────────────────────────────────────────────────────────────
 import streamlit as st
 import hashlib, datetime, random, string, base64, requests, uuid, os
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 import pandas as pd
 
 # ── Page config (first Streamlit call) ───────────────────────────────────────
@@ -45,11 +48,23 @@ AUTH        = f"{SUPA_URL}/auth/v1"
 STORE       = f"{SUPA_URL}/storage/v1"
 BUCKET      = "designs"
 
-# Resend Email API
-SMTP_SERVER = st.secrets["SMTP_SERVER"]
-SMTP_PORT = st.secrets["SMTP_PORT"]
-SENDER_EMAIL = st.secrets["SENDER_EMAIL"]
-SENDER_PASSWORD = st.secrets["SENDER_PASSWORD"]
+# ── SMTP Email Config — loaded from Streamlit Secrets ────────────────────────
+# In .streamlit/secrets.toml:
+#   SMTP_SERVER   = "smtp.gmail.com"
+#   SMTP_PORT     = 587
+#   SENDER_EMAIL  = "abdullrhmanback@gmail.com"
+#   SENDER_PASSWORD = "cnyv mmrh wktl yrwb"
+try:
+    SMTP_SERVER      = st.secrets["SMTP_SERVER"]
+    SMTP_PORT        = int(st.secrets["SMTP_PORT"])
+    SENDER_EMAIL     = st.secrets["SENDER_EMAIL"]
+    SENDER_PASSWORD  = st.secrets["SENDER_PASSWORD"]
+except Exception:
+    # Fallback defaults — override via Streamlit Secrets in production
+    SMTP_SERVER      = "smtp.gmail.com"
+    SMTP_PORT        = 587
+    SENDER_EMAIL     = "abdullrhmanback@gmail.com"
+    SENDER_PASSWORD  = "cnyv mmrh wktl yrwb"
 
 RH = {          # REST headers
     "apikey":        SUPA_KEY,
@@ -767,57 +782,168 @@ def _push_notification(workspace_id: int, title: str, body: str,
     })
 
 # ── Business helpers ───────────────────────────────────────────────────────────
-import smtplib
-from email.mime.text import MIMEText
-from email.header import Header
 
-def _send_reset_email(to_email: str, otp: str) -> bool:
-    """Send password reset OTP via Gmail SMTP. OTP never shown in UI."""
-    
-    # نفس التصميم الفخم والسينمائي لـ Z-ORDER الذي كان في Resend
-    html_body = f"""
-    <div dir="rtl" style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;
-         background:#060708;color:#f0f2f8;padding:2rem;border-radius:12px;">
-      <div style="text-align:center;margin-bottom:1.5rem">
-        <span style="font-family:monospace;font-size:2rem;font-weight:700;color:#e8a020;">
-          Z-ORDER
-        </span>
-      </div>
-      <p style="font-size:1rem;margin-bottom:.5rem">إعادة تعيين كلمة المرور</p>
-      <p style="color:#8590a8;font-size:.9rem;margin-bottom:1.5rem">
-        استخدم الرمز التالي لإعادة تعيين كلمة مرورك:
-      </p>
-      <div style="background:#13161f;border:1px solid #232a3d;border-radius:10px;
-           padding:1.5rem;text-align:center;margin-bottom:1.5rem">
-        <span style="font-family:monospace;font-size:2.5rem;font-weight:700;
-              letter-spacing:.35em;color:#ef4444;">{otp}</span>
-      </div>
-      <p style="color:#3a4258;font-size:.75rem;">
-        إذا لم تطلب إعادة التعيين، تجاهل هذا الإيميل.
-      </p>
-    </div>
+def wid() -> int:
+    return st.session_state.get("workspace_id", 0)
+
+def _order_no() -> str:
+    n = _count("orders", {"workspace_id": wid()})
+    return f"ZO-{datetime.date.today().strftime('%y%m%d')}-{n+1:04d}"
+
+def _gen_otp() -> str:
+    return "".join(random.choices(string.digits, k=6))
+
+
+def _build_email_html(otp: str, mode: str = "verify") -> str:
+    """Build professional HTML email body. mode: 'verify' | 'reset'"""
+    if mode == "reset":
+        title   = "إعادة تعيين كلمة المرور"
+        desc    = "استخدم الرمز التالي لإعادة تعيين كلمة مرورك:"
+        clr     = "#ef4444"
+        footer_note = "إذا لم تطلب إعادة التعيين، تجاهل هذا الإيميل."
+    else:
+        title   = "رمز التحقق الخاص بك"
+        desc    = "لإتمام التسجيل في Z-ORDER، استخدم رمز التحقق التالي:"
+        clr     = "#e8a020"
+        footer_note = "إذا لم تطلب التسجيل في Z-ORDER، تجاهل هذا الإيميل."
+
+    return f"""
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#0a0c11;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr><td align="center" style="padding:2rem 1rem;">
+      <table width="480" cellpadding="0" cellspacing="0"
+             style="background:#0e1118;border-radius:14px;border:1px solid #232a3d;
+                    max-width:480px;width:100%;">
+        <tr>
+          <td style="padding:2rem;text-align:center;border-bottom:1px solid #1a1f2e;">
+            <span style="font-family:monospace;font-size:2rem;font-weight:700;color:#e8a020;">
+              Z-ORDER
+            </span><br>
+            <span style="font-size:.72rem;color:#8590a8;letter-spacing:.12em;">
+              BUILT FOR ORGANIZED TEAMS
+            </span>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:2rem;">
+            <p style="font-size:1.05rem;font-weight:600;color:#f0f2f8;margin:0 0 .5rem">
+              {title}
+            </p>
+            <p style="color:#8590a8;font-size:.88rem;margin:0 0 1.5rem">
+              {desc}
+            </p>
+            <div style="background:#13161f;border:1px solid #232a3d;border-radius:10px;
+                        padding:1.5rem;text-align:center;margin-bottom:1.5rem;">
+              <span style="font-family:monospace;font-size:2.6rem;font-weight:700;
+                           letter-spacing:.4em;color:{clr};">{otp}</span>
+            </div>
+            <p style="color:#8590a8;font-size:.78rem;margin:0 0 .4rem">
+              ⏰ الرمز صالح لمدة جلسة العمل الحالية فقط.
+            </p>
+            <p style="color:#3a4258;font-size:.72rem;margin:0">
+              {footer_note}
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:1rem 2rem;border-top:1px solid #1a1f2e;text-align:center;">
+            <span style="color:#3a4258;font-size:.68rem;">
+              Developed by Abdulrahman Fallah &nbsp;·&nbsp; Z-ORDER © 2026
+            </span>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>
+"""
+
+
+def send_verification_email(user_email: str, code: str) -> bool:
     """
-    
+    Send OTP verification code via Gmail SMTP (smtplib).
+    Uses st.secrets for credentials — no external API keys needed.
+    The OTP code is NEVER displayed in the UI.
+    Subject: Z-ORDER | رمز التحقق الخاص بك
+    Returns True on success, False on failure (logs error to console).
+    """
     try:
-        # إعداد نص الرسالة وتحديد نوعها HTML ودعم الترميز العربي UTF-8
-        msg = MIMEText(html_body, 'html', 'utf-8')
-        msg['Subject'] = Header("Z-ORDER | رمز إعادة تعيين كلمة المرور", 'utf-8')
-        msg['From'] = SENDER_EMAIL
-        msg['To'] = to_email
-        
-        # فتح الاتصال الآمن مع سيرفر Gmail والإرسال فوراً
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=15)
-        server.starttls()  # تشفير الاتصال
-        server.login(SENDER_EMAIL, SENDER_PASSWORD)
-        server.sendmail(SENDER_EMAIL, [to_email], msg.as_string())
-        server.quit()
-        
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "Z-ORDER | رمز التحقق الخاص بك"
+        msg["From"]    = f"Z-ORDER <{SENDER_EMAIL}>"
+        msg["To"]      = user_email
+
+        # Plain text fallback
+        plain = (
+            f"Z-ORDER | رمز التحقق الخاص بك\n\n"
+            f"رمز التحقق الخاص بك هو: {code}\n\n"
+            f"الرمز صالح لمدة جلسة العمل الحالية فقط.\n"
+            f"إذا لم تطلب التسجيل، تجاهل هذا الإيميل.\n\n"
+            f"Developed by Abdulrahman Fallah · Z-ORDER © 2026"
+        )
+        msg.attach(MIMEText(plain, "plain", "utf-8"))
+        msg.attach(MIMEText(_build_email_html(code, "verify"), "html", "utf-8"))
+
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=20) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(SENDER_EMAIL, SENDER_PASSWORD)
+            server.sendmail(SENDER_EMAIL, [user_email], msg.as_string())
         return True
-    except Exception as e:
-        # طباعة الخطأ في الكونسول الخلفي فقط للمطور لتتبع المشاكل إن وجدت
-        print(f"SMTP Reset Email Error: {e}")
+
+    except smtplib.SMTPAuthenticationError:
+        print("[Z-ORDER SMTP] Authentication failed — check SENDER_EMAIL / SENDER_PASSWORD in secrets.")
         return False
-        
+    except smtplib.SMTPException as e:
+        print(f"[Z-ORDER SMTP] SMTP error: {e}")
+        return False
+    except Exception as e:
+        print(f"[Z-ORDER SMTP] Unexpected error: {e}")
+        return False
+
+
+def send_reset_email(user_email: str, code: str) -> bool:
+    """
+    Send password-reset OTP via Gmail SMTP.
+    Subject: Z-ORDER | رمز إعادة تعيين كلمة المرور
+    The OTP code is NEVER displayed in the UI.
+    Returns True on success, False on failure.
+    """
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "Z-ORDER | رمز إعادة تعيين كلمة المرور"
+        msg["From"]    = f"Z-ORDER <{SENDER_EMAIL}>"
+        msg["To"]      = user_email
+
+        plain = (
+            f"Z-ORDER | إعادة تعيين كلمة المرور\n\n"
+            f"رمز إعادة التعيين: {code}\n\n"
+            f"الرمز صالح لمدة جلسة العمل الحالية فقط.\n"
+            f"إذا لم تطلب إعادة التعيين، تجاهل هذا الإيميل."
+        )
+        msg.attach(MIMEText(plain, "plain", "utf-8"))
+        msg.attach(MIMEText(_build_email_html(code, "reset"), "html", "utf-8"))
+
+        with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=20) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(SENDER_EMAIL, SENDER_PASSWORD)
+            server.sendmail(SENDER_EMAIL, [user_email], msg.as_string())
+        return True
+
+    except smtplib.SMTPAuthenticationError:
+        print("[Z-ORDER SMTP] Auth error on reset email.")
+        return False
+    except Exception as e:
+        print(f"[Z-ORDER SMTP] Reset email error: {e}")
+        return False
+
 STATUS_BADGE_MAP = {
     "جديد":             ("b-new", "🔵 جديد"),
     "قيد التصميم":      ("b-des", "🎨 تصميم"),
@@ -956,7 +1082,7 @@ def auth_screen() -> bool:
                     if user:
                         otp = _gen_otp()
                         with st.spinner("جاري إرسال رمز إعادة التعيين..."):
-                            email_sent = _send_reset_email(em, otp)
+                            email_sent = send_reset_email(em, otp)
                         # Store OTP in session — never in UI
                         st.session_state["reset_email"] = em
                         st.session_state["reset_otp"]   = otp
@@ -994,7 +1120,7 @@ def auth_screen() -> bool:
             if st.button("📨 إعادة إرسال الرمز", key="ro_resend"):
                 new_otp = _gen_otp()
                 with st.spinner("جاري الإرسال..."):
-                    ok = _send_reset_email(st.session_state.get("reset_email",""), new_otp)
+                    ok = send_reset_email(st.session_state.get("reset_email",""), new_otp)
                 if ok:
                     st.session_state["reset_otp"] = new_otp
                     st.success("✅ تم إرسال رمز جديد.")
@@ -1064,7 +1190,7 @@ def auth_screen() -> bool:
                         otp = _gen_otp()
                         # ── Send OTP via Resend — NEVER display on screen ────
                         with st.spinner("جاري إرسال رمز التحقق إلى بريدك الإلكتروني..."):
-                            sent = _send_otp_email(em.strip().lower(), otp)
+                            sent = send_verification_email(em.strip().lower(), otp)
                         st.session_state.update(
                             r_cn=cn.strip(), r_em=em.strip().lower(),
                             r_pw=pw1, r_otp=otp, scr="r_otp")
@@ -1100,7 +1226,7 @@ def auth_screen() -> bool:
             if st.button("📨 إعادة إرسال الرمز", key="rOresend"):
                 new_otp = _gen_otp()
                 with st.spinner("جاري إعادة الإرسال..."):
-                    ok = _send_otp_email(st.session_state.get("r_em",""), new_otp)
+                    ok = send_verification_email(st.session_state.get("r_em",""), new_otp)
                 if ok:
                     st.session_state["r_otp"] = new_otp
                     st.success("✅ تم إرسال رمز جديد إلى بريدك.")
