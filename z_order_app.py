@@ -2,7 +2,7 @@
 ╔══════════════════════════════════════════════════════════════════════════╗
 ║   Z-ORDER V2  ·  Built for Organized Teams  ·  v2.0  FINAL            ║
 ╠══════════════════════════════════════════════════════════════════════════╣
-║  Developer  : Abdulrahman Fallah  ©  2026                              ║
+║  Developer  : Abdulrahman Shawush  ©  2026                              ║
 ║  Backend    : Supabase  (PostgreSQL · Auth · Storage)                  ║
 ╠══════════════════════════════════════════════════════════════════════════╣
 ║  pip install streamlit requests pandas                                  ║
@@ -32,7 +32,7 @@ st.set_page_config(
 # ══════════════════════════════════════════════════════════════════════════════
 #  CONSTANTS
 # ══════════════════════════════════════════════════════════════════════════════
-DEVELOPER     = "Abdulrahman Fallah"
+DEVELOPER     = "Abdulrahman Shawush"
 APP_NAME      = "Z-ORDER V2"
 APP_TAGLINE   = "Built for Organized Teams"
 APP_VER       = "2.0"
@@ -595,6 +595,29 @@ def _get(table, filters=None, order=None, limit=500, single=False):
     return rows
 
 
+def _get_direct(table: str, filters: dict = None,
+                order: str = None, limit: int = 1000):
+    """
+    Direct Supabase read — NO cache.
+    Use for pages that must show real-time data (e.g. design queue).
+    """
+    params = {"limit": limit}
+    if order: params["order"] = order
+    if filters:
+        for k, v in filters.items():
+            if   v is None:           params[k] = "is.null"
+            elif isinstance(v, bool): params[k] = f"eq.{'true' if v else 'false'}"
+            else:                     params[k] = f"eq.{v}"
+    try:
+        r = requests.get(f"{REST}/{table}", headers=RH, params=params, timeout=12)
+        if r.status_code == 200:
+            return r.json()
+        st.error(f"خطأ جلب البيانات [{r.status_code}]: {r.text[:120]}")
+    except Exception as e:
+        st.error(f"خطأ اتصال: {e}")
+    return []
+
+
 def _post(table, data):
     """
     Insert a row into a Supabase table.
@@ -851,7 +874,7 @@ def _build_email_html(otp: str, mode: str = "verify") -> str:
         <tr>
           <td style="padding:1rem 2rem;border-top:1px solid #1a1f2e;text-align:center;">
             <span style="color:#3a4258;font-size:.68rem;">
-              Developed by Abdulrahman Fallah &nbsp;·&nbsp; Z-ORDER © 2026
+              Developed by Abdulrahman Shawush &nbsp;·&nbsp; Z-ORDER © 2026
             </span>
           </td>
         </tr>
@@ -883,7 +906,7 @@ def send_verification_email(user_email: str, code: str) -> bool:
             f"رمز التحقق الخاص بك هو: {code}\n\n"
             f"الرمز صالح لمدة جلسة العمل الحالية فقط.\n"
             f"إذا لم تطلب التسجيل، تجاهل هذا الإيميل.\n\n"
-            f"Developed by Abdulrahman Fallah · Z-ORDER © 2026"
+            f"Developed by Abdulrahman Shawush · Z-ORDER © 2026"
         )
         msg.attach(MIMEText(plain, "plain", "utf-8"))
         msg.attach(MIMEText(_build_email_html(code, "verify"), "html", "utf-8"))
@@ -1965,68 +1988,162 @@ def pg_sales_preview():
 # ══════════════════════════════════════════════════════════════════════════════
 
 def pg_design():
-    hdr("🎨","قسم التصميم — Z-ORDER V2","ارفع ملف التصميم لكل أوردر")
-    guide("① تظهر هنا جميع الأوردرات الجديدة التي تحتاج تصميم — من المبيعات ومن المندوبين<br>"
-          "② الملف يُرفع لـ Supabase Storage — لن يضيع أبداً<br>"
-          "③ بعد الرفع يصل إشعار لقسم الإنتاج مباشرة")
-    WID  = wid()
-    rows = _get("orders", {"workspace_id": WID}, order="id.desc")
+    hdr("🎨","قسم التصميم — Z-ORDER V2","جميع الطلبات التي تحتاج تصميم")
+    guide(
+        "① تظهر هنا <b>جميع</b> الطلبات الجديدة من المبيعات والمندوبين<br>"
+        "② افتح الطلب واضغط 'تأكيد رفع التصميم' لرفع ملفك<br>"
+        "③ بعد الرفع ينتقل الطلب تلقائياً لقسم الإنتاج مع إشعار فوري"
+    )
+    WID = wid()
 
-    # FIX: show ALL orders not yet designed — covers new sales & agent orders
-    pend = [r for r in rows
-            if r.get("design_status","") not in ("مكتمل",)
-            and r.get("status","") not in ("تم التسليم",)]
-    done = [r for r in rows if r.get("design_status") == "مكتمل"]
+    # ── Refresh button — يُجبر جلب بيانات جديدة من Supabase مباشرة ──────────
+    col_r, col_h = st.columns([1, 5])
+    with col_r:
+        if st.button("🔄 تحديث", key="design_refresh"):
+            _get_cached.clear()
+            st.rerun()
+    with col_h:
+        st.markdown(
+            '<div style="color:var(--t3);font-size:.75rem;padding-top:.55rem">'
+            'اضغط تحديث إذا لم تظهر طلبات جديدة</div>',
+            unsafe_allow_html=True)
+
+    # ── DIRECT fetch — no cache — guarantees real-time data ──────────────────
+    rows = _get_direct("orders", {"workspace_id": WID}, order="id.desc", limit=500)
+
+    if rows is None:
+        st.error("تعذّر جلب الطلبات من Supabase. تحقق من الاتصال.")
+        return
+
+    # ── Filter: any order where design is not yet completed ───────────────────
+    # Catches: design_status=None, "", "قيد الانتظار", or any non-"مكتمل" value
+    # Excludes: orders already delivered (no more work needed)
+    DONE_STATUSES    = {"مكتمل", "تم التسليم", "تم_التسليم", "delivered", "done"}
+    DESIGN_DONE      = {"مكتمل", "تم التصميم", "designed"}
+
+    pend = [
+        r for r in rows
+        if str(r.get("design_status") or "").strip() not in DESIGN_DONE
+        and str(r.get("status") or "").strip() not in DONE_STATUSES
+    ]
+    done = [
+        r for r in rows
+        if str(r.get("design_status") or "").strip() in DESIGN_DONE
+    ]
+
+    # ── Debug info (shows in sidebar if enabled, helps diagnose) ─────────────
+    with st.expander("🔍 تشخيص — عدد الطلبات", expanded=False):
+        st.write(f"إجمالي الطلبات في قاعدة البيانات: **{len(rows)}**")
+        st.write(f"تحتاج تصميم: **{len(pend)}**")
+        st.write(f"مكتملة: **{len(done)}**")
+        if rows:
+            statuses = {}
+            for r in rows:
+                ds = str(r.get("design_status") or "فارغ")
+                statuses[ds] = statuses.get(ds, 0) + 1
+            st.write("توزيع حالة التصميم:", statuses)
 
     t1, t2 = st.tabs([
         f"⏳ تحتاج تصميم ({len(pend)})",
         f"✅ مكتملة ({len(done)})"
     ])
 
+    # ─────────────────────────────────────────────────────────────────────────
     with t1:
         if not pend:
-            st.success("🎉 لا توجد أوردرات تحتاج تصميم حالياً!")
+            st.success("🎉 لا توجد طلبات بانتظار التصميم حالياً.")
+            st.info("إذا أضاف قسم المبيعات طلباً للتو، اضغط '🔄 تحديث' أعلاه.")
+        else:
+            # Summary chips
+            status_counts = {}
+            for r in pend:
+                s = r.get("status","—")
+                status_counts[s] = status_counts.get(s, 0) + 1
+            chips = " &nbsp; ".join(
+                f'<span style="background:rgba(232,160,32,.12);'
+                f'border:1px solid rgba(232,160,32,.25);border-radius:999px;'
+                f'padding:.12rem .55rem;font-size:.7rem;color:var(--gold);">'
+                f'{s}: {c}</span>'
+                for s, c in status_counts.items()
+            )
+            st.markdown(chips, unsafe_allow_html=True)
+            st.markdown("")
+
         for r in pend:
-            ds = r.get("design_status","") or "جديد"
-            icon = "🔵" if ds == "قيد الانتظار" else "🟢"
+            oid    = r.get("id","")
+            onum   = r.get("order_number","—")
+            cname  = r.get("customer_name","—")
+            status = r.get("status","—")
+            ds     = str(r.get("design_status") or "جديد")
+            icon   = "🟢" if ds in ("", None, "جديد") else "🔵"
+
             with st.expander(
-                f"{icon} {r.get('order_number','')}  —  "
-                f"{r.get('customer_name','')}  [{r.get('status','—')}]"
+                f"{icon} {onum}  ←  {cname}  "
+                f"[الحالة: {status}]"
             ):
+                # Order details — clean and readable
+                st.subheader(f"📋 تفاصيل الطلب  {onum}")
                 c1, c2 = st.columns(2)
-                c1.markdown(f"**العميل:** {r.get('customer_name','—')}")
-                c1.markdown(f"**الكمية:** {r.get('quantity','—')}")
-                c1.markdown(f"**القياس:** {r.get('size','—')}")
-                c2.markdown(f"**التاريخ:** {str(r.get('created_at','—'))[:16]}")
-                c2.markdown(f"**أضافه:** {r.get('created_by_name','—')}")
-                c2.markdown(f"**النشاط:** {r.get('paper_type','—')}")
+                c1.markdown(f"**👤 العميل:** {cname}")
+                c1.markdown(f"**📦 الكمية:** {r.get('quantity','—')}")
+                c1.markdown(f"**📐 القياس:** {r.get('size','—')}")
+                c1.markdown(f"**🏪 النشاط:** {r.get('paper_type','—')}")
+                c2.markdown(f"**📅 التاريخ:** {str(r.get('created_at','—'))[:16]}")
+                c2.markdown(f"**👨 أضافه:** {r.get('created_by_name','—')}")
+                c2.markdown(f"**📊 الحالة:** {status}")
+                c2.markdown(f"**🎨 حالة التصميم:** {ds or 'لم يبدأ بعد'}")
                 if r.get("description"):
                     st.info(f"📝 التفاصيل: {r.get('description','')}")
+                if r.get("customer_phone"):
+                    st.markdown(f"**📞 الهاتف:** {r.get('customer_phone')}")
+
                 st.markdown("---")
-                upld  = st.file_uploader(
-                    "📎 رفع ملف التصميم *", key=f"du_{r['id']}",
-                    type=["pdf","png","jpg","jpeg","ai","psd","svg","eps","zip","cdr"])
-                dl    = st.text_input("🔗 أو رابط التصميم",
-                                      value=r.get("design_link","") or "", key=f"dl_{r['id']}")
-                notes = st.text_area("📝 ملاحظات للإنتاج",
-                                     value=r.get("design_notes","") or "",
-                                     key=f"dn_{r['id']}", height=65)
-                if st.button("✅ تأكيد رفع التصميم", key=f"dok_{r['id']}"):
+                st.markdown("**⬆️ رفع ملف التصميم**")
+
+                upld = st.file_uploader(
+                    "اختر ملف التصميم",
+                    key=f"du_{oid}",
+                    type=["pdf","png","jpg","jpeg","ai","psd",
+                          "svg","eps","zip","cdr","webp"],
+                    help="يُرفع إلى Supabase Storage مباشرة"
+                )
+                dl    = st.text_input(
+                    "🔗 أو أدخل رابط التصميم (بديل عن الملف)",
+                    value=r.get("design_link","") or "",
+                    key=f"dl_{oid}"
+                )
+                notes = st.text_area(
+                    "📝 ملاحظات للإنتاج",
+                    value=r.get("design_notes","") or "",
+                    key=f"dn_{oid}",
+                    height=65,
+                    placeholder="أي تعليمات خاصة للطباعة..."
+                )
+
+                if st.button("✅ تأكيد رفع التصميم وإرساله للإنتاج",
+                             key=f"dok_{oid}", use_container_width=True):
                     file_url   = ""
                     store_path = r.get("design_storage_path","") or ""
+
                     if upld:
-                        with st.spinner("جاري رفع الملف..."):
+                        with st.spinner("⬆️ جاري رفع الملف إلى Supabase Storage..."):
                             file_url, store_path = _upload(
                                 upld.read(), upld.name,
                                 upld.type or "application/octet-stream",
-                                subfolder="designs")
+                                subfolder="designs"
+                            )
+                        if not file_url:
+                            st.error("❌ فشل رفع الملف. تحقق من الاتصال وحجم الملف.")
+                            st.stop()
                     else:
                         file_url = r.get("design_file_url","") or ""
+
                     link = dl.strip() or r.get("design_link","")
+
                     if not file_url and not link:
-                        st.error("⚠️ يجب رفع ملف أو إدخال رابط التصميم.")
+                        st.error("⚠️ يجب رفع ملف التصميم أو إدخال رابطه قبل المتابعة.")
                     else:
-                        _patch("orders", {"id": r["id"]}, {
+                        ok = _patch("orders", {"id": oid}, {
                             "design_status":       "مكتمل",
                             "design_file_url":     file_url,
                             "design_storage_path": store_path,
@@ -2036,42 +2153,55 @@ def pg_design():
                             "design_by":           st.session_state["uname"],
                             "status":              "جاهز للطباعة",
                         })
-                        _push_notification(WID,
-                            f"تصميم جاهز: {r.get('order_number','')}",
-                            f"العميل: {r.get('customer_name','')} — يمكنكم البدء بالطباعة",
-                            target_roles=["production"], order_id=r["id"])
-                        st.success("✅ تم رفع التصميم! إشعار أُرسل لقسم الإنتاج.")
-                        _get_cached.clear(); st.rerun()
+                        if ok:
+                            _push_notification(
+                                WID,
+                                f"🎨 تصميم جاهز: {onum}",
+                                f"العميل: {cname} — يمكنكم البدء بالطباعة الآن",
+                                target_roles=["production", "admin"],
+                                order_id=oid
+                            )
+                            _get_cached.clear()
+                            st.success(
+                                f"✅ تم رفع التصميم بنجاح!\n\n"
+                                f"الطلب **{onum}** انتقل إلى قسم الإنتاج تلقائياً.")
+                            st.rerun()
+                        else:
+                            st.error("❌ فشل تحديث حالة الطلب في Supabase.")
 
+    # ─────────────────────────────────────────────────────────────────────────
     with t2:
         if not done:
             st.info("لا توجد تصاميم مكتملة بعد.")
-        for r in done:
-            co1, co2, co3 = st.columns([3, 1, 1])
-            with co1:
-                st.markdown(
-                    f'<div class="card"><b>{r.get("order_number","")}</b>'
-                    f' — {r.get("customer_name","")}'
-                    f'&nbsp;{bdg("جاهز للطباعة")}'
-                    f'<br><small style="color:var(--t3)">'
-                    f'🗓 {str(r.get("design_updated","—"))[:16]}'
-                    f' | 👤 {r.get("design_by","—")}</small></div>',
-                    unsafe_allow_html=True)
-            with co2:
-                fu = r.get("design_file_url","") or r.get("design_link","")
-                if fu: _dl_btn(fu, "⬇️ تحميل")
-            with co3:
-                if st.button("🗑️ حذف", key=f"del_ds_{r['id']}",
-                             help="يحذف ملف التصميم من Storage ويحذف الطلب"):
-                    sp = r.get("design_storage_path","")
-                    if sp: _storage_delete(sp)
-                    try:
-                        requests.delete(f"{REST}/orders", headers=RH,
-                                        params={"id": f"eq.{r['id']}"}, timeout=10)
-                    except Exception: pass
-                    _get_cached.clear()
-                    st.success("✅ تم حذف الطلب والملف.")
-                    st.rerun()
+        else:
+            for r in done:
+                co1, co2, co3 = st.columns([3, 1, 1])
+                with co1:
+                    st.markdown(
+                        f'<div class="card">'
+                        f'<b>{r.get("order_number","")}</b>'
+                        f' — {r.get("customer_name","")}'
+                        f'&nbsp;{bdg("جاهز للطباعة")}'
+                        f'<br><small style="color:var(--t3)">'
+                        f'🗓 {str(r.get("design_updated","—"))[:16]}'
+                        f' | 👤 {r.get("design_by","—")}'
+                        f'</small></div>',
+                        unsafe_allow_html=True)
+                with co2:
+                    fu = r.get("design_file_url","") or r.get("design_link","")
+                    if fu: _dl_btn(fu, "⬇️ تحميل")
+                with co3:
+                    if st.button("🗑️ حذف", key=f"del_ds_{r['id']}",
+                                 help="يحذف الملف من Storage ويحذف الطلب"):
+                        sp = r.get("design_storage_path","")
+                        if sp: _storage_delete(sp)
+                        try:
+                            requests.delete(f"{REST}/orders", headers=RH,
+                                            params={"id": f"eq.{r['id']}"}, timeout=10)
+                        except Exception: pass
+                        _get_cached.clear()
+                        st.success("✅ تم حذف الطلب والملف.")
+                        st.rerun()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
