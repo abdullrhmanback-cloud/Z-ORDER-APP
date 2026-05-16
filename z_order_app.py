@@ -1465,7 +1465,7 @@ def top_nav() -> str:
 def pg_notifications():
     role = st.session_state["role"]
     hdr("🔔","الإشعارات","تنبيهات تغييرات الحالة والمهام")
-    WID = wid()
+    WID   = wid()
     all_n = _get("notifications",{"workspace_id":WID},order="id.desc",limit=80)
     my_n  = [n for n in all_n
              if n.get("target_roles","all") in ("all",role)
@@ -1475,7 +1475,7 @@ def pg_notifications():
         st.info("📭 لا توجد إشعارات."); return
 
     unread = [n for n in my_n if not n.get("is_read")]
-    read   = [n for n in my_n if  n.get("is_read")]
+    read   = [n for n in my_n if     n.get("is_read")]
 
     if unread:
         if st.button("✅ تحديد الكل كمقروء", key="mark_all"):
@@ -1483,26 +1483,97 @@ def pg_notifications():
                 _patch("notifications", {"id": n["id"]}, {"is_read": True})
             _get_cached.clear(); st.rerun()
 
-    def _render_notifs(lst):
+    # ── Track which notification is expanded to show order details ──────────
+    if "notif_order_id" not in st.session_state:
+        st.session_state["notif_order_id"] = None
+
+    def _render_notif_list(lst):
         for n in lst:
             rdcls = "unread" if not n.get("is_read") else ""
             dot   = "notif-dot" if not n.get("is_read") else "notif-dot read"
+
+            # Notification card HTML
             st.markdown(
                 f'<div class="notif-item {rdcls}">'
                 f'<div class="{dot}"></div>'
-                f'<div><div style="font-size:.85rem;font-weight:600;color:var(--t1)">{n.get("title","")}</div>'
-                f'<div style="font-size:.78rem;color:var(--t2);margin-top:2px">{n.get("body","")}</div>'
-                f'<div style="font-size:.62rem;color:var(--t3);margin-top:4px">{str(n.get("created_at",""))[:16]}</div>'
+                f'<div style="flex:1">'
+                f'<div style="font-size:.85rem;font-weight:600;color:var(--t1)">'
+                f'{n.get("title","")}</div>'
+                f'<div style="font-size:.78rem;color:var(--t2);margin-top:2px">'
+                f'{n.get("body","")}</div>'
+                f'<div style="font-size:.62rem;color:var(--t3);margin-top:4px">'
+                f'{str(n.get("created_at",""))[:16]}</div>'
                 f'</div></div>',
                 unsafe_allow_html=True)
-            if not n.get("is_read"):
-                if st.button("قراءة", key=f"rd_{n['id']}"):
-                    _patch("notifications",{"id":n["id"]},{"is_read":True})
-                    _get_cached.clear(); st.rerun()
 
-    t1,t2 = st.tabs([f"🔴 غير مقروءة ({len(unread)})",f"✅ مقروءة ({len(read)})"])
-    with t1: _render_notifs(unread) if unread else st.success("🎉 لا توجد إشعارات جديدة!")
-    with t2: _render_notifs(read)   if read   else st.info("لا توجد إشعارات مقروءة.")
+            # Action buttons — only mark as read, no broken order-view
+            btn_col1, btn_col2 = st.columns([1, 3])
+            with btn_col1:
+                if not n.get("is_read"):
+                    if st.button("📖 قراءة", key=f"rd_{n['id']}"):
+                        _patch("notifications", {"id": n["id"]}, {"is_read": True})
+                        _get_cached.clear()
+                        st.rerun()
+
+            # If this notification links to an order — show details button
+            order_id = n.get("order_id")
+            if order_id:
+                with btn_col2:
+                    btn_key = f"view_order_{n['id']}"
+                    if st.button(f"📋 عرض الطلب #{order_id}", key=btn_key):
+                        # Toggle: show or hide
+                        if st.session_state["notif_order_id"] == order_id:
+                            st.session_state["notif_order_id"] = None
+                        else:
+                            st.session_state["notif_order_id"] = order_id
+
+            # ── Show order details INLINE — clean Streamlit calls only ───────
+            if order_id and st.session_state.get("notif_order_id") == order_id:
+                order_data = _get("orders", {"id": order_id}, single=True)
+                if order_data and isinstance(order_data, dict):
+                    st.markdown("---")
+                    st.subheader(f"📋 تفاصيل الطلب  #{order_data.get('order_number','—')}")
+
+                    c1, c2 = st.columns(2)
+                    c1.markdown(f"**العميل:** {order_data.get('customer_name','—')}")
+                    c1.markdown(f"**الهاتف:** {order_data.get('customer_phone','—')}")
+                    c1.markdown(f"**الكمية:** {order_data.get('quantity','—')}")
+                    c1.markdown(f"**القياس:** {order_data.get('size','—')}")
+                    c2.markdown(f"**الحالة:** {order_data.get('status','—')}")
+                    c2.markdown(f"**النشاط:** {order_data.get('paper_type','—')}")
+                    c2.markdown(f"**التاريخ:** {str(order_data.get('created_at','—'))[:16]}")
+                    c2.markdown(f"**أضافه:** {order_data.get('created_by_name','—')}")
+
+                    if order_data.get("description"):
+                        st.info(f"📝 التفاصيل: {order_data.get('description','')}")
+
+                    if order_data.get("total_price"):
+                        st.markdown(f"**السعر الكلي:** {order_data.get('total_price','—')} "
+                                    f"| **المدفوع:** {order_data.get('paid','—')}")
+
+                    if order_data.get("delivery_date"):
+                        st.markdown(f"**تاريخ التسليم:** {order_data.get('delivery_date','—')}")
+
+                    st.markdown("---")
+                else:
+                    st.warning("لم يتم العثور على تفاصيل هذا الطلب.")
+
+            st.markdown("")  # spacer between notifications
+
+    t1, t2 = st.tabs([
+        f"🔴 غير مقروءة ({len(unread)})",
+        f"✅ مقروءة ({len(read)})"
+    ])
+    with t1:
+        if unread:
+            _render_notif_list(unread)
+        else:
+            st.success("🎉 لا توجد إشعارات جديدة!")
+    with t2:
+        if read:
+            _render_notif_list(read)
+        else:
+            st.info("لا توجد إشعارات مقروءة.")
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  SUPER-ADMIN PAGES
@@ -1894,31 +1965,47 @@ def pg_sales_preview():
 # ══════════════════════════════════════════════════════════════════════════════
 
 def pg_design():
-    hdr("🎨","قسم التصميم","ارفع ملف التصميم لكل أوردر")
-    guide("① الملف يُرفع مباشرة لـ Supabase Storage — محفوظ للأبد<br>"
-          "② بعد الرفع يتحول الأوردر إلى «جاهز للطباعة» ويصل إشعار للإنتاج<br>"
-          "③ يمكن لقسم المبيعات معاينة الملف من «التصاميم»")
+    hdr("🎨","قسم التصميم — Z-ORDER V2","ارفع ملف التصميم لكل أوردر")
+    guide("① تظهر هنا جميع الأوردرات الجديدة التي تحتاج تصميم — من المبيعات ومن المندوبين<br>"
+          "② الملف يُرفع لـ Supabase Storage — لن يضيع أبداً<br>"
+          "③ بعد الرفع يصل إشعار لقسم الإنتاج مباشرة")
     WID  = wid()
-    rows = _get("orders",{"workspace_id":WID},order="id.desc")
-    pend = [r for r in rows if r.get("design_status")=="قيد الانتظار"]
-    done = [r for r in rows if r.get("design_status")=="مكتمل"]
+    rows = _get("orders", {"workspace_id": WID}, order="id.desc")
 
-    t1,t2 = st.tabs([f"⏳ قيد الانتظار ({len(pend)})", f"✅ مكتملة ({len(done)})"])
+    # FIX: show ALL orders not yet designed — covers new sales & agent orders
+    pend = [r for r in rows
+            if r.get("design_status","") not in ("مكتمل",)
+            and r.get("status","") not in ("تم التسليم",)]
+    done = [r for r in rows if r.get("design_status") == "مكتمل"]
+
+    t1, t2 = st.tabs([
+        f"⏳ تحتاج تصميم ({len(pend)})",
+        f"✅ مكتملة ({len(done)})"
+    ])
+
     with t1:
-        if not pend: st.success("🎉 لا توجد مهام تصميم معلقة!")
+        if not pend:
+            st.success("🎉 لا توجد أوردرات تحتاج تصميم حالياً!")
         for r in pend:
-            with st.expander(f"🔷 {r.get('order_number','')}  —  {r.get('customer_name','')}"):
-                c1,c2 = st.columns(2)
-                c1.markdown(f"**الورق:** {r.get('paper_type','')} · {r.get('size','')}")
-                c1.markdown(f"**الكمية:** {r.get('quantity','')}")
-                c2.markdown(f"**التاريخ:** {str(r.get('created_at',''))[:16]}")
-                c2.markdown(f"**أضافه:** {r.get('created_by_name','')}")
+            ds = r.get("design_status","") or "جديد"
+            icon = "🔵" if ds == "قيد الانتظار" else "🟢"
+            with st.expander(
+                f"{icon} {r.get('order_number','')}  —  "
+                f"{r.get('customer_name','')}  [{r.get('status','—')}]"
+            ):
+                c1, c2 = st.columns(2)
+                c1.markdown(f"**العميل:** {r.get('customer_name','—')}")
+                c1.markdown(f"**الكمية:** {r.get('quantity','—')}")
+                c1.markdown(f"**القياس:** {r.get('size','—')}")
+                c2.markdown(f"**التاريخ:** {str(r.get('created_at','—'))[:16]}")
+                c2.markdown(f"**أضافه:** {r.get('created_by_name','—')}")
+                c2.markdown(f"**النشاط:** {r.get('paper_type','—')}")
                 if r.get("description"):
-                    st.markdown(f"**الوصف:** {r.get('description','')}")
+                    st.info(f"📝 التفاصيل: {r.get('description','')}")
                 st.markdown("---")
-                upld  = st.file_uploader("📎 رفع ملف التصميم *",
-                                          key=f"du_{r['id']}",
-                                          type=["pdf","png","jpg","jpeg","ai","psd","svg","eps","zip","cdr"])
+                upld  = st.file_uploader(
+                    "📎 رفع ملف التصميم *", key=f"du_{r['id']}",
+                    type=["pdf","png","jpg","jpeg","ai","psd","svg","eps","zip","cdr"])
                 dl    = st.text_input("🔗 أو رابط التصميم",
                                       value=r.get("design_link","") or "", key=f"dl_{r['id']}")
                 notes = st.text_area("📝 ملاحظات للإنتاج",
@@ -1928,66 +2015,64 @@ def pg_design():
                     file_url   = ""
                     store_path = r.get("design_storage_path","") or ""
                     if upld:
-                        with st.spinner("جاري رفع الملف إلى Supabase Storage..."):
+                        with st.spinner("جاري رفع الملف..."):
                             file_url, store_path = _upload(
-                                upld.read(),
-                                upld.name,
+                                upld.read(), upld.name,
                                 upld.type or "application/octet-stream",
-                                subfolder="designs",
-                            )
+                                subfolder="designs")
                     else:
                         file_url = r.get("design_file_url","") or ""
                     link = dl.strip() or r.get("design_link","")
                     if not file_url and not link:
                         st.error("⚠️ يجب رفع ملف أو إدخال رابط التصميم.")
                     else:
-                        _patch("orders",{"id":r["id"]},{
-                            "design_status":        "مكتمل",
-                            "design_file_url":      file_url,
-                            "design_storage_path":  store_path,
-                            "design_link":          link,
-                            "design_notes":         notes.strip(),
-                            "design_updated":       _ts(),
-                            "design_by":            st.session_state["uname"],
-                            "status":               "جاهز للطباعة",
+                        _patch("orders", {"id": r["id"]}, {
+                            "design_status":       "مكتمل",
+                            "design_file_url":     file_url,
+                            "design_storage_path": store_path,
+                            "design_link":         link,
+                            "design_notes":        notes.strip(),
+                            "design_updated":      _ts(),
+                            "design_by":           st.session_state["uname"],
+                            "status":              "جاهز للطباعة",
                         })
                         _push_notification(WID,
-                                           f"تصميم جاهز: {r.get('order_number','')}",
-                                           f"العميل: {r.get('customer_name','')} — يمكنكم البدء بالطباعة",
-                                           target_roles=["production"],
-                                           order_id=r["id"])
+                            f"تصميم جاهز: {r.get('order_number','')}",
+                            f"العميل: {r.get('customer_name','')} — يمكنكم البدء بالطباعة",
+                            target_roles=["production"], order_id=r["id"])
                         st.success("✅ تم رفع التصميم! إشعار أُرسل لقسم الإنتاج.")
                         _get_cached.clear(); st.rerun()
 
     with t2:
-        if not done: st.info("لا توجد تصاميم مكتملة.")
+        if not done:
+            st.info("لا توجد تصاميم مكتملة بعد.")
         for r in done:
             co1, co2, co3 = st.columns([3, 1, 1])
             with co1:
                 st.markdown(
-                    f'<div class="card"><b>{r.get("order_number","")}</b> — {r.get("customer_name","")}'
+                    f'<div class="card"><b>{r.get("order_number","")}</b>'
+                    f' — {r.get("customer_name","")}'
                     f'&nbsp;{bdg("جاهز للطباعة")}'
-                    f'<br><small style="color:var(--t3)">🗓 {str(r.get("design_updated","—"))[:16]}'
+                    f'<br><small style="color:var(--t3)">'
+                    f'🗓 {str(r.get("design_updated","—"))[:16]}'
                     f' | 👤 {r.get("design_by","—")}</small></div>',
                     unsafe_allow_html=True)
             with co2:
                 fu = r.get("design_file_url","") or r.get("design_link","")
-                if fu: _dl_btn(fu,"⬇️ تحميل")
+                if fu: _dl_btn(fu, "⬇️ تحميل")
             with co3:
-                # زر الحذف — يحذف الملف من Storage والسجل من DB
                 if st.button("🗑️ حذف", key=f"del_ds_{r['id']}",
-                             help="يحذف ملف التصميم من Storage ويحذف الطلب نهائياً"):
+                             help="يحذف ملف التصميم من Storage ويحذف الطلب"):
                     sp = r.get("design_storage_path","")
                     if sp: _storage_delete(sp)
-                    # delete order row
                     try:
-                        requests.delete(f"{REST}/orders",
-                                        headers=RH,
+                        requests.delete(f"{REST}/orders", headers=RH,
                                         params={"id": f"eq.{r['id']}"}, timeout=10)
                     except Exception: pass
                     _get_cached.clear()
-                    st.success("✅ تم حذف الطلب والملف من Storage.")
+                    st.success("✅ تم حذف الطلب والملف.")
                     st.rerun()
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  PRODUCTION PAGE
@@ -2677,61 +2762,97 @@ def main():
 
     st.markdown('<div class="pw">', unsafe_allow_html=True)
 
-    # ── SUPER-ADMIN ──────────────────────────────────────────────────────────
-    if   role == "superadmin" and active == "📊 لوحة التحكم":  pg_sa_dash()
-    elif role == "superadmin" and active == "🏢 الشركات":       pg_sa_companies()
-    elif role == "superadmin" and active == "👥 المستخدمون":    pg_sa_users()
-    elif role == "superadmin" and active == "📈 الإحصائيات":    pg_sa_stats()
+    # ══════════════════════════════════════════════════════════════
+    #  SUPER-ADMIN — platform owner only
+    # ══════════════════════════════════════════════════════════════
+    if role == "superadmin":
+        if   active == "📊 لوحة التحكم":  pg_sa_dash()
+        elif active == "🏢 الشركات":       pg_sa_companies()
+        elif active == "👥 المستخدمون":    pg_sa_users()
+        elif active == "📈 الإحصائيات":    pg_sa_stats()
+        else: st.warning(f"الصفحة «{active}» غير متاحة.")
 
-    # ── ADMIN ────────────────────────────────────────────────────────────────
-    elif role == "admin" and active == "📊 الرئيسية":  pg_admin_dash()
-    elif role == "admin" and active == "👥 الفريق":    pg_team()
-    elif role == "admin" and active == "📋 الأوردرات": show_orders("admin",title="جميع الأوردرات")
-    elif role == "admin" and active == "💰 المالية":   pg_financial()
-    elif role == "admin" and active == "🔔 الإشعارات": pg_notifications()
-    elif role == "admin" and active == "🚨 البلاغات":  pg_all_incidents()
-    elif role == "admin" and active == "🗺️ المندوبون": pg_agent_reports()
-    elif role == "admin" and active == "💬 المحادثة":  pg_chat()
-    elif role == "admin" and active == "📞 تواصل معنا": pg_support()
+    # ══════════════════════════════════════════════════════════════
+    #  ADMIN — workspace manager
+    # ══════════════════════════════════════════════════════════════
+    elif role == "admin":
+        if   active == "📊 الرئيسية":   pg_admin_dash()
+        elif active == "👥 الفريق":     pg_team()
+        elif active == "📋 الأوردرات":  show_orders("admin", title="جميع الأوردرات")
+        elif active == "💰 المالية":    pg_financial()
+        elif active == "🔔 الإشعارات":  pg_notifications()
+        elif active == "🚨 البلاغات":   pg_all_incidents()
+        elif active == "🗺️ المندوبون":  pg_agent_reports()
+        elif active == "💬 المحادثة":   pg_chat()
+        elif active == "📞 تواصل معنا": pg_support()
+        else: st.warning(f"الصفحة «{active}» غير متاحة.")
 
-    # ── SALES ────────────────────────────────────────────────────────────────
-    elif role == "sales" and active == "📊 الرئيسية":    pg_sales_dash()
-    elif active == "➕ أوردر جديد":                       pg_add_order()
-    elif active == "📋 أوردراتي":
-        show_orders("sales", uid_filter=st.session_state["uid"], title="أوردراتي")
-    elif active == "🖼️ التصاميم":                         pg_sales_preview_v2()   # updated
-    elif role == "sales" and active == "💰 تقريري":       pg_financial()
-    elif role == "sales" and active == "🔔 إشعاراتي":     pg_notifications()
+    # ══════════════════════════════════════════════════════════════
+    #  SALES — sales team
+    # ══════════════════════════════════════════════════════════════
+    elif role == "sales":
+        if   active == "📊 الرئيسية":      pg_sales_dash()
+        elif active == "➕ أوردر جديد":    pg_add_order()
+        elif active == "📋 أوردراتي":
+            show_orders("sales", uid_filter=st.session_state["uid"], title="أوردراتي")
+        elif active == "🖼️ التصاميم":       pg_sales_preview_v2()
+        elif active == "💰 تقريري":         pg_financial()
+        elif active == "📦 طلب شراء":       pg_purchase_submit()
+        elif active == "🔔 إشعاراتي":       pg_notifications()
+        elif active == "💬 المحادثة":        pg_chat()
+        elif active == "🚨 بلاغ":            pg_incident_submit()
+        else: st.warning(f"الصفحة «{active}» غير متاحة.")
 
-    # ── DESIGN ───────────────────────────────────────────────────────────────
-    elif role == "design" and active == "📊 الرئيسية":           pg_generic_dash(role)
-    elif active == "🎨 التصميم":                                  pg_design()
-    elif role == "design" and active == "🖼️ Mockup للمبيعات":    pg_design_mockup()
-    elif role == "design" and active == "🔔 إشعاراتي":           pg_notifications()
+    # ══════════════════════════════════════════════════════════════
+    #  DESIGN — design team (strictly separated from production)
+    # ══════════════════════════════════════════════════════════════
+    elif role == "design":
+        if   active == "📊 الرئيسية":         pg_generic_dash(role)
+        elif active == "🎨 التصميم":           pg_design()         # design ONLY
+        elif active == "🖼️ Mockup للمبيعات":   pg_design_mockup()
+        elif active == "🔔 إشعاراتي":          pg_notifications()
+        elif active == "💬 المحادثة":           pg_chat()
+        elif active == "📦 طلب شراء":          pg_purchase_submit()
+        elif active == "🚨 بلاغ":               pg_incident_submit()
+        else: st.warning(f"الصفحة «{active}» غير متاحة.")
 
-    # ── PURCHASE ─────────────────────────────────────────────────────────────
-    elif role == "purchase" and active == "📊 الرئيسية":  pg_generic_dash(role)
-    elif active == "📦 طلبات الشراء":                      pg_purchase_manage()
+    # ══════════════════════════════════════════════════════════════
+    #  PURCHASE — purchasing team
+    # ══════════════════════════════════════════════════════════════
+    elif role == "purchase":
+        if   active == "📊 الرئيسية":     pg_generic_dash(role)
+        elif active == "📦 طلبات الشراء":  pg_purchase_manage()
+        elif active == "💬 المحادثة":      pg_chat()
+        elif active == "🚨 بلاغ":           pg_incident_submit()
+        else: st.warning(f"الصفحة «{active}» غير متاحة.")
 
-    # ── PRODUCTION ───────────────────────────────────────────────────────────
-    elif role == "production" and active == "📊 الرئيسية":  pg_generic_dash(role)
-    elif active == "🖨️ الإنتاج":                             pg_production()
-    elif role == "production" and active == "📋 الأوردرات": show_orders("production",title="الأوردرات")
-    elif role == "production" and active == "🔔 إشعاراتي":  pg_notifications()
+    # ══════════════════════════════════════════════════════════════
+    #  PRODUCTION — production team (strictly separated from design)
+    # ══════════════════════════════════════════════════════════════
+    elif role == "production":
+        if   active == "📊 الرئيسية":   pg_generic_dash(role)
+        elif active == "🖨️ الإنتاج":    pg_production()     # production ONLY
+        elif active == "📋 الأوردرات":  show_orders("production", title="الأوردرات")
+        elif active == "🔔 إشعاراتي":   pg_notifications()
+        elif active == "💬 المحادثة":   pg_chat()
+        elif active == "📦 طلب شراء":   pg_purchase_submit()
+        elif active == "🚨 بلاغ":        pg_incident_submit()
+        else: st.warning(f"الصفحة «{active}» غير متاحة.")
 
-    # ── AGENT ────────────────────────────────────────────────────────────────
-    elif role == "agent" and active == "📊 الرئيسية":   pg_generic_dash(role)
-    elif role == "agent" and active == "➕ أوردر ميداني": pg_agent_order()     # NEW
-    elif active == "🗺️ زيارة جديدة":                    pg_agent_new()
-    elif active == "📋 زياراتي":                         pg_agent_my()
-
-    # ── SHARED ───────────────────────────────────────────────────────────────
-    elif active == "📦 طلب شراء":  pg_purchase_submit()
-    elif active == "🚨 بلاغ":       pg_incident_submit()
-    elif active == "💬 المحادثة":   pg_chat()
+    # ══════════════════════════════════════════════════════════════
+    #  AGENT — field sales agent
+    # ══════════════════════════════════════════════════════════════
+    elif role == "agent":
+        if   active == "📊 الرئيسية":     pg_generic_dash(role)
+        elif active == "➕ أوردر ميداني":  pg_agent_order()
+        elif active == "🗺️ زيارة جديدة":  pg_agent_new()
+        elif active == "📋 زياراتي":       pg_agent_my()
+        elif active == "💬 المحادثة":      pg_chat()
+        elif active == "🚨 بلاغ":           pg_incident_submit()
+        else: st.warning(f"الصفحة «{active}» غير متاحة.")
 
     else:
-        st.warning(f"الصفحة «{active}» غير متاحة.")
+        st.error(f"دور غير معروف: {role}. يرجى تسجيل الخروج وإعادة الدخول.")
 
     st.markdown('</div>', unsafe_allow_html=True)
     footer()
