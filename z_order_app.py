@@ -1324,32 +1324,75 @@ def auth_screen() -> bool:
 
 
 def _do_login(idn: str, pw: str):
-    # Platform super-admin (never stored in DB)
-    if idn.lower() in (SA_EMAIL, "superadmin", "admin"):
+    """
+    Simple, direct login — queries users table directly (no cache).
+    Works with both email and username.
+    Sets session state on success and reruns.
+    """
+
+    # ── Platform super-admin (hard-coded, never in DB) ────────────────────
+    if idn.strip().lower() in (SA_EMAIL.lower(), "superadmin", "admin"):
         if pw == SA_PASS:
             st.session_state.update(
                 auth=True, uid=0, uname=DEVELOPER,
-                role="superadmin", workspace_id=0, workspace_name="Z-ORDER Platform")
-            st.rerun(); return
-        st.error("❌ كلمة المرور غير صحيحة."); return
+                role="superadmin", workspace_id=0,
+                workspace_name="Z-ORDER Platform")
+            st.rerun()
+        else:
+            st.error("❌ كلمة المرور غير صحيحة.")
+        return
 
-    pw_h = _h(pw)
-    user = (_get("users", {"email":   idn.lower(), "password": pw_h, "is_active": True}, single=True)
-         or _get("users", {"username": idn.lower(), "password": pw_h, "is_active": True}, single=True))
+    # ── Direct DB lookup — no cache, no complex logic ─────────────────────
+    pw_hash = _h(pw)
+    idn_lc  = idn.strip().lower()
+
+    user = None
+
+    # Try email match
+    rows = _get_direct("users", {"email": idn_lc, "password": pw_hash})
+    if rows:
+        # Filter is_active client-side (handles bool True/1 variants)
+        user = next(
+            (u for u in rows if u.get("is_active") not in (False, 0, "false")),
+            None
+        )
+
+    # Try username match if email failed
+    if not user:
+        rows = _get_direct("users", {"username": idn_lc, "password": pw_hash})
+        if rows:
+            user = next(
+                (u for u in rows if u.get("is_active") not in (False, 0, "false")),
+                None
+            )
 
     if not user:
-        st.error("❌ بيانات غير صحيحة أو الحساب موقوف."); return
+        st.error("❌ بيانات غير صحيحة أو الحساب موقوف.")
+        return
 
-    ws_id, ws_name = user.get("workspace_id", 0), ""
-    if ws_id:
-        ws = _get("workspaces", {"id": ws_id}, single=True)
-        ws_name = ws.get("name","") if ws else ""
+    # ── Resolve workspace name (best-effort, non-blocking) ────────────────
+    ws_id   = user.get("workspace_id") or 0
+    ws_name = ""
+    try:
+        ws_rows = _get_direct("workspaces", {"id": ws_id})
+        if ws_rows:
+            ws_name = ws_rows[0].get("name", "")
+    except Exception:
+        ws_name = ""
 
+    # ── Set session state and enter app ───────────────────────────────────
     st.session_state.update(
-        auth=True, uid=user["id"], uname=user["full_name"],
-        role=user["role"], workspace_id=ws_id, workspace_name=ws_name)
-    for k in ("scr","r_cn","r_em","r_pw","r_otp"):
+        auth=True,
+        uid=user["id"],
+        uname=user.get("full_name", idn_lc),
+        role=user.get("role", "sales"),
+        workspace_id=ws_id,
+        workspace_name=ws_name,
+    )
+    # Clear any leftover registration state
+    for k in ("scr", "r_cn", "r_em", "r_pw", "r_otp"):
         st.session_state.pop(k, None)
+
     st.rerun()
 
 
