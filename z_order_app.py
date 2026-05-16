@@ -48,7 +48,7 @@ AUTH        = f"{SUPA_URL}/auth/v1"
 STORE       = f"{SUPA_URL}/storage/v1"
 BUCKET      = "designs"
 
-# Try to load service role key from secrets (bypasses RLS completely)
+# ── Service role key — bypasses RLS completely ───────────────────────────────
 # Add to .streamlit/secrets.toml:  SUPA_SERVICE_KEY = "eyJ..."
 try:
     _svc = st.secrets.get("SUPA_SERVICE_KEY", "")
@@ -57,28 +57,29 @@ except Exception:
     ACTIVE_KEY = SUPA_KEY
 
 # ── SMTP Email Config — loaded from Streamlit Secrets ────────────────────────
-# In .streamlit/secrets.toml:
-#   SMTP_SERVER   = "smtp.gmail.com"
-#   SMTP_PORT     = 587
-#   SENDER_EMAIL  = "abdullrhmanback@gmail.com"
-#   SENDER_PASSWORD = "cnyv mmrh wktl yrwb"
 try:
     SMTP_SERVER      = st.secrets["SMTP_SERVER"]
     SMTP_PORT        = int(st.secrets["SMTP_PORT"])
     SENDER_EMAIL     = st.secrets["SENDER_EMAIL"]
     SENDER_PASSWORD  = st.secrets["SENDER_PASSWORD"]
 except Exception:
-    # Fallback defaults — override via Streamlit Secrets in production
     SMTP_SERVER      = "smtp.gmail.com"
     SMTP_PORT        = 587
     SENDER_EMAIL     = "abdullrhmanback@gmail.com"
     SENDER_PASSWORD  = "cnyv mmrh wktl yrwb"
 
-RH = {          # REST headers — uses service key if set in secrets (bypasses RLS)
+# ── REST headers — always use ACTIVE_KEY (service key if available) ──────────
+RH = {
     "apikey":        ACTIVE_KEY,
     "Authorization": f"Bearer {ACTIVE_KEY}",
     "Content-Type":  "application/json",
     "Prefer":        "return=representation",
+}
+
+# ── Storage headers — always use ACTIVE_KEY ──────────────────────────────────
+SH = {
+    "apikey":        ACTIVE_KEY,
+    "Authorization": f"Bearer {ACTIVE_KEY}",
 }
 
 # Platform super-admin (hard-coded, NOT in database)
@@ -340,107 +341,47 @@ hr{border-color:var(--bdr) !important;margin:.85rem 0 !important;}
 .order-summary .total-row td{border-top:1px solid var(--bdr2);font-weight:700;
   font-size:.95rem;padding-top:.55rem;}
 
-/* ═══ MOBILE ≤ 768px — Comprehensive Responsive Fix ═══════════════════ */
+/* ═══ MOBILE ≤ 768px ═══════════════════════════════════════════════════ */
 @media(max-width:768px){
-
-  /* ── Content padding ── */
   .pw{padding:.5rem .3rem 7rem !important;}
-
-  /* ── Page header smaller ── */
   .ph-icon{width:32px;height:32px;font-size:1rem;}
   .ph h2{font-size:.9rem;}
   .ph p{font-size:.66rem;}
-
-  /* ── ALL columns stack vertically — core fix ── */
   [data-testid="column"]{
-    width:100% !important;
-    flex:0 0 100% !important;
-    min-width:100% !important;
-    padding:2px 0 !important;
-  }
-
-  /* ── Buttons: full width, touch-friendly ── */
-  .stButton>button{
-    font-size:.82rem !important;
-    min-height:50px !important;
-    margin-bottom:4px !important;
-    padding:.55rem .7rem !important;
-  }
-
-  /* ── Inputs larger touch targets ── */
-  .stTextInput>div>div>input,
-  .stTextArea>div>div>textarea,
-  .stSelectbox>div>div,
-  .stNumberInput>div>div>input{
-    font-size:.9rem !important;
-    padding:.55rem .7rem !important;
-  }
-
-  /* ── Metrics compact ── */
+    width:100% !important;flex:0 0 100% !important;
+    min-width:100% !important;padding:2px 0 !important;}
+  .stButton>button{font-size:.82rem !important;min-height:50px !important;
+    margin-bottom:4px !important;padding:.55rem .7rem !important;}
+  .stTextInput>div>div>input,.stTextArea>div>div>textarea,
+  .stSelectbox>div>div,.stNumberInput>div>div>input{
+    font-size:.9rem !important;padding:.55rem .7rem !important;}
   [data-testid="stMetricValue"]{font-size:.95rem !important;}
   [data-testid="stMetric"]{padding:.65rem .75rem !important;}
-
-  /* ── Tables: horizontal scroll on mobile ── */
   .stDataFrame,[data-testid="stDataFrame"],iframe[title="st.dataframe"]{
-    overflow-x:auto !important;
-    display:block !important;
-    width:100% !important;
-    font-size:.76rem !important;
-  }
-
-  /* ── Top bar ── */
-  .topbar{
-    padding:.38rem .45rem !important;
-    gap:.4rem !important;
-  }
+    overflow-x:auto !important;display:block !important;
+    width:100% !important;font-size:.76rem !important;}
+  .topbar{padding:.38rem .45rem !important;gap:.4rem !important;}
   .zlogo{font-size:1.05rem !important;}
-  .zlogo .tag{display:none !important;}   /* hide tagline on small screens */
+  .zlogo .tag{display:none !important;}
   .uchip{padding:.22rem .55rem .22rem .28rem !important;}
-
-  /* ── Footer ── */
   .footer{font-size:.55rem !important;padding:.28rem .45rem !important;}
-
-  /* ── Chat bubbles ── */
   .bubble{max-width:94% !important;}
-
-  /* ── Order summary table ── */
   .order-summary{padding:.65rem .5rem !important;}
   .order-summary td{font-size:.75rem !important;padding:.22rem .3rem !important;}
-
-  /* ── Auth box ── */
   .auth-box{padding:1.2rem .9rem !important;}
   .logo-big{font-size:1.75rem !important;}
-
-  /* ── Expanders ── */
   .streamlit-expanderHeader{font-size:.82rem !important;}
-
-  /* ── Tabs: horizontal scroll ── */
-  .stTabs [data-baseweb="tab-list"]{
-    overflow-x:auto !important;
-    flex-wrap:nowrap !important;
-    -webkit-overflow-scrolling:touch !important;
-  }
-  .stTabs [data-baseweb="tab"]{
-    font-size:.72rem !important;
-    padding:.3rem .45rem !important;
-    white-space:nowrap !important;
-  }
-
-  /* ── Nav selectbox ── */
+  .stTabs [data-baseweb="tab-list"]{overflow-x:auto !important;
+    flex-wrap:nowrap !important;-webkit-overflow-scrolling:touch !important;}
+  .stTabs [data-baseweb="tab"]{font-size:.72rem !important;
+    padding:.3rem .45rem !important;white-space:nowrap !important;}
   .nav-sel .stSelectbox>div>div{font-size:.8rem !important;}
-
-  /* ── Status tracker: hide connector lines on mobile ── */
   .tracker{flex-wrap:wrap;gap:.3rem;}
   .tr-step::after{display:none;}
-
-  /* ── Notification items ── */
   .notif-item{padding:.55rem .7rem !important;}
-
-  /* ── Cards ── */
   .card{padding:.75rem .85rem !important;}
 }
 
-/* ═══ SMALL PHONES ≤ 380px ═══════════════════════════════════════════════ */
 @media(max-width:380px){
   .pw{padding:.4rem .2rem 7rem !important;}
   .ph h2{font-size:.82rem;}
@@ -451,11 +392,9 @@ hr{border-color:var(--bdr) !important;margin:.85rem 0 !important;}
 """, unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  PWA + AUDIO NOTIFICATIONS + BADGE API + @MENTION TAGGING
-#  Injected once via st.components — works on Android Chrome & iOS Safari PWA
+#  PWA + AUDIO NOTIFICATIONS
 # ══════════════════════════════════════════════════════════════════════════════
 st.markdown("""
-<!-- PWA Manifest (inline) — Z ORDER icon + name -->
 <link rel="manifest" href="data:application/manifest+json,{
   &quot;name&quot;: &quot;Z ORDER&quot;,
   &quot;short_name&quot;: &quot;Z ORDER&quot;,
@@ -464,109 +403,55 @@ st.markdown("""
   &quot;background_color&quot;: &quot;#060708&quot;,
   &quot;theme_color&quot;: &quot;#e8a020&quot;,
   &quot;icons&quot;: [
-    {
-      &quot;src&quot;: &quot;https://raw.githubusercontent.com/abdullrhmanback-cloud/Z-ORDER-APP/refs/heads/main/IMG_5574.PNG&quot;,
-      &quot;sizes&quot;: &quot;192x192&quot;,
-      &quot;type&quot;: &quot;image/png&quot;,
-      &quot;purpose&quot;: &quot;any maskable&quot;
-    },
-    {
-      &quot;src&quot;: &quot;https://raw.githubusercontent.com/abdullrhmanback-cloud/Z-ORDER-APP/refs/heads/main/IMG_5574.PNG&quot;,
-      &quot;sizes&quot;: &quot;512x512&quot;,
-      &quot;type&quot;: &quot;image/png&quot;,
-      &quot;purpose&quot;: &quot;any maskable&quot;
-    }
-  ]
-}">
+    {&quot;src&quot;:&quot;https://raw.githubusercontent.com/abdullrhmanback-cloud/Z-ORDER-APP/refs/heads/main/IMG_5574.PNG&quot;,&quot;sizes&quot;:&quot;192x192&quot;,&quot;type&quot;:&quot;image/png&quot;,&quot;purpose&quot;:&quot;any maskable&quot;},
+    {&quot;src&quot;:&quot;https://raw.githubusercontent.com/abdullrhmanback-cloud/Z-ORDER-APP/refs/heads/main/IMG_5574.PNG&quot;,&quot;sizes&quot;:&quot;512x512&quot;,&quot;type&quot;:&quot;image/png&quot;,&quot;purpose&quot;:&quot;any maskable&quot;}
+  ]}">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Z ORDER">
 <link rel="apple-touch-icon" href="https://raw.githubusercontent.com/abdullrhmanback-cloud/Z-ORDER-APP/refs/heads/main/IMG_5574.PNG">
 <meta name="theme-color" content="#e8a020">
-
 <script>
-// ── Audio Notification (beep on new order/message) ──────────────────────────
-function zPlayBeep(freq=880, dur=180) {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain= ctx.createGain();
-    osc.connect(gain); gain.connect(ctx.destination);
-    osc.frequency.value = freq;
-    osc.type = 'sine';
-    gain.gain.setValueAtTime(0.5, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur/1000);
-    osc.start(ctx.currentTime);
-    osc.stop(ctx.currentTime + dur/1000);
-  } catch(e) {}
-}
-window.zPlayBeep = zPlayBeep;
-
-// ── Request browser notification permission on load ──────────────────────────
-function zRequestNotifPermission() {
-  if ('Notification' in window && Notification.permission === 'default') {
-    Notification.requestPermission().then(p => {
-      if (p === 'granted') console.log('[Z-ORDER] Notifications granted');
-    });
-  }
-}
+function zPlayBeep(freq=880,dur=180){
+  try{const ctx=new(window.AudioContext||window.webkitAudioContext)();
+  const osc=ctx.createOscillator();const gain=ctx.createGain();
+  osc.connect(gain);gain.connect(ctx.destination);
+  osc.frequency.value=freq;osc.type='sine';
+  gain.gain.setValueAtTime(0.5,ctx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+dur/1000);
+  osc.start(ctx.currentTime);osc.stop(ctx.currentTime+dur/1000);}catch(e){}}
+window.zPlayBeep=zPlayBeep;
+function zRequestNotifPermission(){
+  if('Notification'in window&&Notification.permission==='default')
+    Notification.requestPermission();}
 zRequestNotifPermission();
-
-// ── Show browser push notification ──────────────────────────────────────────
-function zShowNotif(title, body) {
+function zShowNotif(title,body){
   zPlayBeep();
-  if ('Notification' in window && Notification.permission === 'granted') {
-    new Notification(title, { body: body, icon: '/favicon.ico', badge: '/favicon.ico' });
-  }
-}
-window.zShowNotif = zShowNotif;
-
-// ── App Badging API (Android/Desktop PWA) ───────────────────────────────────
-function zSetBadge(count) {
-  if ('setAppBadge' in navigator) {
-    if (count > 0) navigator.setAppBadge(count).catch(()=>{});
-    else           navigator.clearAppBadge().catch(()=>{});
-  }
-}
-window.zSetBadge = zSetBadge;
-
-// ── @mention detector in chat ────────────────────────────────────────────────
-// Called from Python via streamlit.js bridge when a chat message is sent.
-// Scans message for @role tags and triggers a notification.
-function zCheckMention(message, currentRole) {
-  const roles = ['المبيعات','التصميم','الإنتاج','المشتريات','مندوب','مدير','admin','sales','design','production','purchase'];
-  for (const r of roles) {
-    if (message.includes('@' + r)) {
-      zShowNotif('تاغ جديد في المحادثة', `تم تاغ ${r}: ${message.substring(0,60)}`);
-      break;
-    }
-  }
-}
-window.zCheckMention = zCheckMention;
-
-// ── Service Worker registration (for offline PWA) ───────────────────────────
-if ('serviceWorker' in navigator) {
-  const swCode = `
-    self.addEventListener('fetch', e => {});
-    self.addEventListener('push', e => {
-      const data = e.data ? e.data.json() : {};
-      self.registration.showNotification(data.title || 'Z-ORDER', {
-        body: data.body || '',
-        icon: '/favicon.ico'
-      });
-    });
-  `;
-  const blob = new Blob([swCode], {type:'application/javascript'});
-  const url  = URL.createObjectURL(blob);
-  navigator.serviceWorker.register(url).catch(()=>{});
-}
+  if('Notification'in window&&Notification.permission==='granted')
+    new Notification(title,{body:body,icon:'/favicon.ico'});}
+window.zShowNotif=zShowNotif;
+function zSetBadge(count){
+  if('setAppBadge'in navigator){
+    if(count>0)navigator.setAppBadge(count).catch(()=>{});
+    else navigator.clearAppBadge().catch(()=>{});}}
+window.zSetBadge=zSetBadge;
+function zCheckMention(message,currentRole){
+  const roles=['المبيعات','التصميم','الإنتاج','المشتريات','مندوب','مدير','admin','sales','design','production','purchase'];
+  for(const r of roles){if(message.includes('@'+r)){zShowNotif('تاغ جديد في المحادثة',`تم تاغ ${r}: ${message.substring(0,60)}`);break;}}}
+window.zCheckMention=zCheckMention;
+if('serviceWorker'in navigator){
+  const swCode=`self.addEventListener('fetch',e=>{});self.addEventListener('push',e=>{const data=e.data?e.data.json():{};self.registration.showNotification(data.title||'Z-ORDER',{body:data.body||'',icon:'/favicon.ico'});});`;
+  const blob=new Blob([swCode],{type:'application/javascript'});
+  navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(()=>{});}
 </script>
 """, unsafe_allow_html=True)
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+#  HELPERS
+# ══════════════════════════════════════════════════════════════════════════════
 
 def _h(pw: str) -> str:
-    """SHA-256 hash."""
     return hashlib.sha256(pw.encode()).hexdigest()
 
 def _ts() -> str:
@@ -575,19 +460,19 @@ def _ts() -> str:
 def _today() -> str:
     return datetime.date.today().isoformat()
 
-# ── Generic CRUD ───────────────────────────────────────────────────────────────
+
+# ── Generic CRUD ──────────────────────────────────────────────────────────────
 
 @st.cache_data(ttl=30, show_spinner=False)
 def _get_cached(table, filters_json, order, limit):
-    """Cached read — call _get() which wraps this."""
     import json
     filters = json.loads(filters_json) if filters_json else {}
     params  = {"limit": limit}
     if order: params["order"] = order
     for k, v in filters.items():
-        if   v is None:          params[k] = "is.null"
-        elif isinstance(v, bool):params[k] = f"eq.{'true' if v else 'false'}"
-        else:                    params[k] = f"eq.{v}"
+        if   v is None:           params[k] = "is.null"
+        elif isinstance(v, bool): params[k] = f"eq.{'true' if v else 'false'}"
+        else:                     params[k] = f"eq.{v}"
     try:
         r = requests.get(f"{REST}/{table}", headers=RH, params=params, timeout=10)
         if r.status_code == 200: return r.json()
@@ -606,9 +491,8 @@ def _get(table, filters=None, order=None, limit=500, single=False):
 def _get_direct(table: str, filters: dict = None,
                 order: str = None, limit: int = 1000):
     """
-    Direct Supabase REST read — NO cache, NO retry.
-    Returns list of rows on success, empty list [] if truly no rows,
-    or None on network/HTTP error (caller must check).
+    Direct Supabase REST read using ACTIVE_KEY (service key if available).
+    No cache, no retry. Returns list on success, None on error.
     """
     params = {"limit": limit, "select": "*"}
     if order:
@@ -619,21 +503,15 @@ def _get_direct(table: str, filters: dict = None,
             elif isinstance(v, bool): params[k] = f"eq.{'true' if v else 'false'}"
             else:                     params[k] = f"eq.{v}"
 
-    # Use a separate header set that forces Supabase to return all cols
+    # Always use RH which has ACTIVE_KEY
     h = dict(RH)
     h["Prefer"] = "return=representation"
 
     try:
-        r = requests.get(
-            f"{REST}/{table}",
-            headers=h,
-            params=params,
-            timeout=15,
-        )
+        r = requests.get(f"{REST}/{table}", headers=h, params=params, timeout=15)
         if r.status_code == 200:
             data = r.json()
             return data if isinstance(data, list) else []
-        # Non-200 → return None so caller can show a real error
         return None
     except requests.exceptions.Timeout:
         return None
@@ -645,9 +523,8 @@ def _get_direct(table: str, filters: dict = None,
 
 def _post(table, data):
     """
-    Insert a row into a Supabase table.
-    Returns the inserted row dict on success, None on failure.
-    Logs the REAL Supabase error message — never swallows it silently.
+    Insert using ACTIVE_KEY (service key bypasses RLS).
+    Returns inserted row dict on success, error dict on failure.
     """
     try:
         r = requests.post(f"{REST}/{table}", headers=RH, json=data, timeout=10)
@@ -655,12 +532,7 @@ def _post(table, data):
             d = r.json()
             _get_cached.clear()
             return d[0] if isinstance(d, list) and d else d
-        # ── Expose real error from Supabase in the return value ──────────────
-        # Caller decides whether to show it — we don't call st.error() here
-        # because _post is used inside _complete_reg which has its own handling.
-        return {"__error__": True,
-                "__status__": r.status_code,
-                "__msg__": r.text}
+        return {"__error__": True, "__status__": r.status_code, "__msg__": r.text}
     except requests.exceptions.Timeout:
         return {"__error__": True, "__status__": 0,
                 "__msg__": "انتهت مهلة الاتصال بـ Supabase (timeout)."}
@@ -672,19 +544,16 @@ def _post(table, data):
 
 
 def _post_ok(result) -> bool:
-    """Returns True if _post() succeeded (result is a real row, not an error dict)."""
     if result is None: return False
     if isinstance(result, dict) and result.get("__error__"): return False
     return True
 
 
 def _post_err(result) -> str:
-    """Extracts human-readable error from a failed _post() result."""
     if result is None: return "لم يُرجع Supabase أي استجابة."
     if isinstance(result, dict) and result.get("__error__"):
         status = result.get("__status__", "?")
         msg    = result.get("__msg__", "")
-        # Parse Supabase JSON error if possible
         try:
             import json
             err_json = json.loads(msg)
@@ -722,65 +591,60 @@ def _count(table, filters=None) -> int:
     except Exception: pass
     return 0
 
-# ── Supabase Auth helpers ──────────────────────────────────────────────────────
+
+# ── Supabase Auth helpers ─────────────────────────────────────────────────────
 
 def _auth_reset_password(email: str) -> bool:
-    """
-    Trigger Supabase Auth password-reset email.
-    Works when Supabase Auth is configured with the user's real email.
-    For our custom users table we also store a reset_token approach as fallback.
-    """
     try:
         r = requests.post(
             f"{AUTH}/recover",
             headers={"apikey": SUPA_KEY, "Content-Type": "application/json"},
-            json={"email": email},
-            timeout=10,
-        )
+            json={"email": email}, timeout=10)
         return r.status_code in (200, 204)
     except Exception:
         return False
 
 
 def _auth_update_password(access_token: str, new_password: str) -> bool:
-    """Update password via Supabase Auth (used after OTP verification)."""
     try:
         r = requests.put(
             f"{AUTH}/user",
-            headers={"apikey": SUPA_KEY,
-                     "Authorization": f"Bearer {access_token}",
+            headers={"apikey": SUPA_KEY, "Authorization": f"Bearer {access_token}",
                      "Content-Type": "application/json"},
-            json={"password": new_password},
-            timeout=10,
-        )
+            json={"password": new_password}, timeout=10)
         return r.status_code == 200
     except Exception:
         return False
 
-# ── Storage ────────────────────────────────────────────────────────────────────
+
+# ── Storage ───────────────────────────────────────────────────────────────────
 
 def _upload(file_bytes: bytes, filename: str,
             ctype: str = "application/octet-stream",
             subfolder: str = "") -> tuple:
     """
-    Upload to Supabase Storage bucket.
-    Uses UUID-based filename to avoid InvalidKey errors from Arabic/special chars.
-    Returns (public_url, storage_path) tuple.  Both empty strings on failure.
+    Upload to Supabase Storage using ACTIVE_KEY (service key).
+    Returns (public_url, storage_path). Both empty strings on failure.
     """
-    # Extract original extension and build a safe UUID-based name
-    _, ext = os.path.splitext(filename)
-    ext    = ext.lower() if ext else ""
-    uid    = str(uuid.uuid4()).replace("-", "")
-    safe   = f"{uid}{ext}"                       # e.g. "a3f9...b2.pdf"
-    path   = f"{subfolder}/{safe}" if subfolder else safe
-    url    = f"{STORE}/object/{BUCKET}/{path}"
-    h      = {"apikey": SUPA_KEY, "Authorization": f"Bearer {SUPA_KEY}",
-              "Content-Type": ctype, "x-upsert": "true"}
+    _, ext  = os.path.splitext(filename)
+    ext     = ext.lower() if ext else ""
+    uid     = str(uuid.uuid4()).replace("-", "")
+    safe    = f"{uid}{ext}"
+    path    = f"{subfolder}/{safe}" if subfolder else safe
+    url     = f"{STORE}/object/{BUCKET}/{path}"
+
+    # Use service key for storage upload
+    h = {
+        "apikey":        ACTIVE_KEY,
+        "Authorization": f"Bearer {ACTIVE_KEY}",
+        "Content-Type":  ctype,
+        "x-upsert":      "true",
+    }
     try:
         r = requests.post(url, headers=h, data=file_bytes, timeout=60)
         if r.status_code in (200, 201):
             public_url = f"{STORE}/object/public/{BUCKET}/{path}"
-            return public_url, path              # ← return both URL and path
+            return public_url, path
         st.error(f"⚠️ رفع الملف: {r.text[:180]}")
     except Exception as e:
         st.error(f"⚠️ رفع: {e}")
@@ -788,14 +652,14 @@ def _upload(file_bytes: bytes, filename: str,
 
 
 def _storage_delete(storage_path: str) -> bool:
-    """
-    Delete a file from Supabase Storage by its storage path.
-    storage_path is the path inside the bucket (not the full URL).
-    """
+    """Delete a file from Supabase Storage using ACTIVE_KEY."""
     if not storage_path:
         return False
     url = f"{STORE}/object/{BUCKET}/{storage_path}"
-    h   = {"apikey": SUPA_KEY, "Authorization": f"Bearer {SUPA_KEY}"}
+    h   = {
+        "apikey":        ACTIVE_KEY,
+        "Authorization": f"Bearer {ACTIVE_KEY}",
+    }
     try:
         r = requests.delete(url, headers=h, timeout=15)
         return r.status_code in (200, 204)
@@ -815,11 +679,11 @@ def _dl_btn(url: str, label="⬇️ تحميل"):
     st.markdown(f'<a href="{url}" target="_blank" style="color:var(--gold)">🔗 فتح الملف</a>',
                 unsafe_allow_html=True)
 
-# ── Notifications helper ───────────────────────────────────────────────────────
+
+# ── Notifications helper ──────────────────────────────────────────────────────
 
 def _push_notification(workspace_id: int, title: str, body: str,
                         target_roles: list = None, order_id: int = None):
-    """Insert a notification row (read by target roles in same workspace)."""
     _post("notifications", {
         "workspace_id": workspace_id,
         "title":        title,
@@ -829,7 +693,8 @@ def _push_notification(workspace_id: int, title: str, body: str,
         "is_read":      False,
     })
 
-# ── Business helpers ───────────────────────────────────────────────────────────
+
+# ── Business helpers ──────────────────────────────────────────────────────────
 
 def wid() -> int:
     return st.session_state.get("workspace_id", 0)
@@ -843,165 +708,111 @@ def _gen_otp() -> str:
 
 
 def _build_email_html(otp: str, mode: str = "verify") -> str:
-    """Build professional HTML email body. mode: 'verify' | 'reset'"""
     if mode == "reset":
-        title   = "إعادة تعيين كلمة المرور"
-        desc    = "استخدم الرمز التالي لإعادة تعيين كلمة مرورك:"
-        clr     = "#ef4444"
+        title       = "إعادة تعيين كلمة المرور"
+        desc        = "استخدم الرمز التالي لإعادة تعيين كلمة مرورك:"
+        clr         = "#ef4444"
         footer_note = "إذا لم تطلب إعادة التعيين، تجاهل هذا الإيميل."
     else:
-        title   = "رمز التحقق الخاص بك"
-        desc    = "لإتمام التسجيل في Z-ORDER، استخدم رمز التحقق التالي:"
-        clr     = "#e8a020"
+        title       = "رمز التحقق الخاص بك"
+        desc        = "لإتمام التسجيل في Z-ORDER، استخدم رمز التحقق التالي:"
+        clr         = "#e8a020"
         footer_note = "إذا لم تطلب التسجيل في Z-ORDER، تجاهل هذا الإيميل."
 
     return f"""
-<!DOCTYPE html>
-<html dir="rtl" lang="ar">
+<!DOCTYPE html><html dir="rtl" lang="ar">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
 <body style="margin:0;padding:0;background:#0a0c11;font-family:Arial,sans-serif;">
   <table width="100%" cellpadding="0" cellspacing="0">
     <tr><td align="center" style="padding:2rem 1rem;">
       <table width="480" cellpadding="0" cellspacing="0"
-             style="background:#0e1118;border-radius:14px;border:1px solid #232a3d;
-                    max-width:480px;width:100%;">
+             style="background:#0e1118;border-radius:14px;border:1px solid #232a3d;max-width:480px;width:100%;">
         <tr>
           <td style="padding:2rem;text-align:center;border-bottom:1px solid #1a1f2e;">
-            <span style="font-family:monospace;font-size:2rem;font-weight:700;color:#e8a020;">
-              Z-ORDER
-            </span><br>
-            <span style="font-size:.72rem;color:#8590a8;letter-spacing:.12em;">
-              BUILT FOR ORGANIZED TEAMS
-            </span>
+            <span style="font-family:monospace;font-size:2rem;font-weight:700;color:#e8a020;">Z-ORDER</span><br>
+            <span style="font-size:.72rem;color:#8590a8;letter-spacing:.12em;">BUILT FOR ORGANIZED TEAMS</span>
           </td>
         </tr>
         <tr>
           <td style="padding:2rem;">
-            <p style="font-size:1.05rem;font-weight:600;color:#f0f2f8;margin:0 0 .5rem">
-              {title}
-            </p>
-            <p style="color:#8590a8;font-size:.88rem;margin:0 0 1.5rem">
-              {desc}
-            </p>
-            <div style="background:#13161f;border:1px solid #232a3d;border-radius:10px;
-                        padding:1.5rem;text-align:center;margin-bottom:1.5rem;">
-              <span style="font-family:monospace;font-size:2.6rem;font-weight:700;
-                           letter-spacing:.4em;color:{clr};">{otp}</span>
+            <p style="font-size:1.05rem;font-weight:600;color:#f0f2f8;margin:0 0 .5rem">{title}</p>
+            <p style="color:#8590a8;font-size:.88rem;margin:0 0 1.5rem">{desc}</p>
+            <div style="background:#13161f;border:1px solid #232a3d;border-radius:10px;padding:1.5rem;text-align:center;margin-bottom:1.5rem;">
+              <span style="font-family:monospace;font-size:2.6rem;font-weight:700;letter-spacing:.4em;color:{clr};">{otp}</span>
             </div>
-            <p style="color:#8590a8;font-size:.78rem;margin:0 0 .4rem">
-              ⏰ الرمز صالح لمدة جلسة العمل الحالية فقط.
-            </p>
-            <p style="color:#3a4258;font-size:.72rem;margin:0">
-              {footer_note}
-            </p>
+            <p style="color:#8590a8;font-size:.78rem;margin:0 0 .4rem">⏰ الرمز صالح لمدة جلسة العمل الحالية فقط.</p>
+            <p style="color:#3a4258;font-size:.72rem;margin:0">{footer_note}</p>
           </td>
         </tr>
         <tr>
           <td style="padding:1rem 2rem;border-top:1px solid #1a1f2e;text-align:center;">
-            <span style="color:#3a4258;font-size:.68rem;">
-              Developed by Abdulrahman Fallah &nbsp;·&nbsp; Z-ORDER © 2026
-            </span>
+            <span style="color:#3a4258;font-size:.68rem;">Developed by Abdulrahman Fallah &nbsp;·&nbsp; Z-ORDER © 2026</span>
           </td>
         </tr>
       </table>
     </td></tr>
   </table>
-</body>
-</html>
-"""
+</body></html>"""
 
 
 def send_verification_email(user_email: str, code: str) -> bool:
-    """
-    Send OTP verification code via Gmail SMTP (smtplib).
-    Uses st.secrets for credentials — no external API keys needed.
-    The OTP code is NEVER displayed in the UI.
-    Subject: Z-ORDER | رمز التحقق الخاص بك
-    Returns True on success, False on failure (logs error to console).
-    """
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = "Z-ORDER | رمز التحقق الخاص بك"
         msg["From"]    = f"Z-ORDER <{SENDER_EMAIL}>"
         msg["To"]      = user_email
-
-        # Plain text fallback
-        plain = (
-            f"Z-ORDER | رمز التحقق الخاص بك\n\n"
-            f"رمز التحقق الخاص بك هو: {code}\n\n"
-            f"الرمز صالح لمدة جلسة العمل الحالية فقط.\n"
-            f"إذا لم تطلب التسجيل، تجاهل هذا الإيميل.\n\n"
-            f"Developed by Abdulrahman Fallah · Z-ORDER © 2026"
-        )
+        plain = (f"Z-ORDER | رمز التحقق الخاص بك\n\n"
+                 f"رمز التحقق الخاص بك هو: {code}\n\n"
+                 f"الرمز صالح لمدة جلسة العمل الحالية فقط.\n"
+                 f"إذا لم تطلب التسجيل، تجاهل هذا الإيميل.\n\n"
+                 f"Developed by Abdulrahman Fallah · Z-ORDER © 2026")
         msg.attach(MIMEText(plain, "plain", "utf-8"))
         msg.attach(MIMEText(_build_email_html(code, "verify"), "html", "utf-8"))
-
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=20) as server:
-            server.ehlo()
-            server.starttls()
-            server.ehlo()
+            server.ehlo(); server.starttls(); server.ehlo()
             server.login(SENDER_EMAIL, SENDER_PASSWORD)
             server.sendmail(SENDER_EMAIL, [user_email], msg.as_string())
         return True
-
     except smtplib.SMTPAuthenticationError:
-        print("[Z-ORDER SMTP] Authentication failed — check SENDER_EMAIL / SENDER_PASSWORD in secrets.")
-        return False
-    except smtplib.SMTPException as e:
-        print(f"[Z-ORDER SMTP] SMTP error: {e}")
+        print("[Z-ORDER SMTP] Authentication failed.")
         return False
     except Exception as e:
-        print(f"[Z-ORDER SMTP] Unexpected error: {e}")
+        print(f"[Z-ORDER SMTP] Error: {e}")
         return False
 
 
 def send_reset_email(user_email: str, code: str) -> bool:
-    """
-    Send password-reset OTP via Gmail SMTP.
-    Subject: Z-ORDER | رمز إعادة تعيين كلمة المرور
-    The OTP code is NEVER displayed in the UI.
-    Returns True on success, False on failure.
-    """
     try:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = "Z-ORDER | رمز إعادة تعيين كلمة المرور"
         msg["From"]    = f"Z-ORDER <{SENDER_EMAIL}>"
         msg["To"]      = user_email
-
-        plain = (
-            f"Z-ORDER | إعادة تعيين كلمة المرور\n\n"
-            f"رمز إعادة التعيين: {code}\n\n"
-            f"الرمز صالح لمدة جلسة العمل الحالية فقط.\n"
-            f"إذا لم تطلب إعادة التعيين، تجاهل هذا الإيميل."
-        )
+        plain = (f"Z-ORDER | إعادة تعيين كلمة المرور\n\n"
+                 f"رمز إعادة التعيين: {code}\n\n"
+                 f"الرمز صالح لمدة جلسة العمل الحالية فقط.\n"
+                 f"إذا لم تطلب إعادة التعيين، تجاهل هذا الإيميل.")
         msg.attach(MIMEText(plain, "plain", "utf-8"))
         msg.attach(MIMEText(_build_email_html(code, "reset"), "html", "utf-8"))
-
         with smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=20) as server:
-            server.ehlo()
-            server.starttls()
-            server.ehlo()
+            server.ehlo(); server.starttls(); server.ehlo()
             server.login(SENDER_EMAIL, SENDER_PASSWORD)
             server.sendmail(SENDER_EMAIL, [user_email], msg.as_string())
         return True
-
-    except smtplib.SMTPAuthenticationError:
-        print("[Z-ORDER SMTP] Auth error on reset email.")
-        return False
     except Exception as e:
         print(f"[Z-ORDER SMTP] Reset email error: {e}")
         return False
 
+
 STATUS_BADGE_MAP = {
-    "جديد":             ("b-new", "🔵 جديد"),
-    "قيد التصميم":      ("b-des", "🎨 تصميم"),
-    "جاهز للطباعة":    ("b-rdy", "🟢 جاهز"),
-    "جاري الإنتاج":    ("b-prt", "🟠 إنتاج"),
-    "جاهز للتسليم":    ("b-del", "📦 تسليم"),
-    "تم التسليم":      ("b-done","✅ مكتمل"),
+    "جديد":          ("b-new", "🔵 جديد"),
+    "قيد التصميم":   ("b-des", "🎨 تصميم"),
+    "جاهز للطباعة": ("b-rdy", "🟢 جاهز"),
+    "جاري الإنتاج": ("b-prt", "🟠 إنتاج"),
+    "جاهز للتسليم": ("b-del", "📦 تسليم"),
+    "تم التسليم":   ("b-done","✅ مكتمل"),
 }
-SEV_MAP  = {"منخفض":("b-sev-lo","🟢"),"متوسط":("b-sev-md","🟡"),"عالي":("b-sev-hi","🔴")}
-AGT_MAP  = {"اشترى":("b-abuy","✅"),"محتمل":("b-apot","🔵"),"لن يشتري":("b-ano","❌")}
+SEV_MAP = {"منخفض":("b-sev-lo","🟢"),"متوسط":("b-sev-md","🟡"),"عالي":("b-sev-hi","🔴")}
+AGT_MAP = {"اشترى":("b-abuy","✅"),"محتمل":("b-apot","🔵"),"لن يشتري":("b-ano","❌")}
 
 def bdg(k, m=None):
     m = m or STATUS_BADGE_MAP
@@ -1053,23 +864,21 @@ def show_orders(role, uid_filter=None, title="الأوردرات"):
     if sel != "الكل": rows = [r for r in rows if r.get("status") == sel]
     cols = ["order_number","customer_name","paper_type","size","quantity",
             "total_price","paid","remaining","status","created_at"]
-    if not hide_price:
-        show = [c for c in cols if c in (pd.DataFrame(rows).columns if rows else [])]
-    else:
-        show = [c for c in cols if c not in ("total_price","paid","remaining")]
     lbl  = {"order_number":"الأوردر","customer_name":"العميل","paper_type":"الورق",
              "size":"القياس","quantity":"الكمية","total_price":"السعر الكلي",
              "paid":"المدفوع","remaining":"المتبقي","status":"الحالة","created_at":"التاريخ"}
     df = pd.DataFrame(rows)
-    ok = [c for c in show if c in df.columns]
+    if hide_price:
+        cols = [c for c in cols if c not in ("total_price","paid","remaining")]
+    ok = [c for c in cols if c in df.columns]
     st.dataframe(df[ok].rename(columns=lbl), use_container_width=True, hide_index=True)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  AUTH FLOW
 # ══════════════════════════════════════════════════════════════════════════════
 
 def auth_screen() -> bool:
-    """Returns True when session is authenticated. Shows auth UI otherwise."""
     if st.session_state.get("auth"):
         return True
 
@@ -1086,7 +895,7 @@ def auth_screen() -> bool:
 
         scr = st.session_state.get("scr", "login")
 
-        # ── LOGIN ─────────────────────────────────────────────────────────────
+        # ── LOGIN ──────────────────────────────────────────────────────────
         if scr == "login":
             st.markdown('<div class="auth-box">', unsafe_allow_html=True)
             idn = st.text_input("📧 الإيميل أو اسم المستخدم",
@@ -1095,7 +904,6 @@ def auth_screen() -> bool:
             btn = st.button("دخول ←", key="li_b")
             st.markdown('</div>', unsafe_allow_html=True)
 
-            # Forgot password link
             fp_col, _ = st.columns([1,2])
             if fp_col.button("🔑 نسيت كلمة المرور؟", key="fp_lnk"):
                 st.session_state["scr"] = "forgot"; st.rerun()
@@ -1107,15 +915,14 @@ def auth_screen() -> bool:
             if btn:
                 _do_login(idn.strip(), pw.strip())
 
-        # ── FORGOT PASSWORD ───────────────────────────────────────────────────
+        # ── FORGOT PASSWORD ────────────────────────────────────────────────
         elif scr == "forgot":
             st.markdown('<div class="auth-box">', unsafe_allow_html=True)
             st.markdown('<div class="sec">إعادة تعيين كلمة المرور</div>', unsafe_allow_html=True)
-            st.info("💡 سيتم إرسال رابط إعادة التعيين لبريدك الإلكتروني عبر Supabase Auth. "
-                    "إذا كنت مستخدماً داخلياً، سيظهر رمز OTP هنا.")
+            st.info("💡 سيتم إرسال رمز OTP إلى بريدك الإلكتروني.")
             fp_email = st.text_input("📧 الإيميل المسجّل", key="fp_em")
             col1, col2 = st.columns(2)
-            send = col1.button("📨 إرسال رابط الإعادة", key="fp_send")
+            send = col1.button("📨 إرسال رمز الإعادة", key="fp_send")
             st.markdown('</div>', unsafe_allow_html=True)
 
             if col2.button("← رجوع", key="fp_back"):
@@ -1131,40 +938,32 @@ def auth_screen() -> bool:
                         otp = _gen_otp()
                         with st.spinner("جاري إرسال رمز إعادة التعيين..."):
                             email_sent = send_reset_email(em, otp)
-                        # Store OTP in session — never in UI
                         st.session_state["reset_email"] = em
                         st.session_state["reset_otp"]   = otp
                         st.session_state["scr"]         = "reset_otp"
                         if email_sent:
                             st.success(f"✅ تم إرسال رمز إعادة التعيين إلى **{em}**")
                         else:
-                            st.warning("⚠️ تعذّر إرسال الإيميل. "
-                                       "سيُرسل الرمز مجدداً عند المحاولة التالية.")
+                            st.warning("⚠️ تعذّر إرسال الإيميل. سيُرسل الرمز مجدداً عند المحاولة التالية.")
                         st.rerun()
                     else:
-                        # Always show success to avoid user enumeration
                         st.success("✅ إذا كان الإيميل مسجّلاً، ستصلك رسالة قريباً.")
 
-        # ── RESET OTP ─────────────────────────────────────────────────────────
+        # ── RESET OTP ──────────────────────────────────────────────────────
         elif scr == "reset_otp":
             _sbar(2, 0)
             st.markdown('<div class="auth-box">', unsafe_allow_html=True)
             st.markdown('<div class="sec">الخطوة 1 — تأكيد الهوية</div>', unsafe_allow_html=True)
-            # ── OTP is NEVER shown here — sent only to email ──────────────────
             st.markdown(
                 f'<div style="background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.2);'
-                f'border-radius:var(--r);padding:.75rem 1rem;margin-bottom:.75rem;'
-                f'font-size:.84rem;color:var(--t2);">'
+                f'border-radius:var(--r);padding:.75rem 1rem;margin-bottom:.75rem;font-size:.84rem;color:var(--t2);">'
                 f'📨 تم إرسال رمز إعادة التعيين إلى:<br>'
                 f'<b style="color:var(--gold)">{st.session_state.get("reset_email","")}</b><br>'
-                f'<span style="font-size:.74rem;color:var(--t3);">'
-                f'يرجى التحقق من صندوق الوارد وصندوق Spam</span>'
-                f'</div>',
-                unsafe_allow_html=True)
+                f'<span style="font-size:.74rem;color:var(--t3);">يرجى التحقق من صندوق الوارد وصندوق Spam</span>'
+                f'</div>', unsafe_allow_html=True)
             otp_in = st.text_input("🔑 أدخل الرمز (6 أرقام)", key="ro_in",
                                    max_chars=6, placeholder="······")
             ok_btn = st.button("تحقق ←", key="ro_ok")
-            # Resend option
             if st.button("📨 إعادة إرسال الرمز", key="ro_resend"):
                 new_otp = _gen_otp()
                 with st.spinner("جاري الإرسال..."):
@@ -1179,11 +978,11 @@ def auth_screen() -> bool:
                 st.session_state["scr"] = "forgot"; st.rerun()
             if ok_btn:
                 if otp_in.strip() != st.session_state.get("reset_otp",""):
-                    st.error("❌ الرمز غير صحيح. تحقق من بريدك الإلكتروني.")
+                    st.error("❌ الرمز غير صحيح.")
                 else:
                     st.session_state["scr"] = "reset_pw"; st.rerun()
 
-        # ── NEW PASSWORD ──────────────────────────────────────────────────────
+        # ── NEW PASSWORD ────────────────────────────────────────────────────
         elif scr == "reset_pw":
             _sbar(2, 1)
             st.markdown('<div class="auth-box">', unsafe_allow_html=True)
@@ -1192,7 +991,6 @@ def auth_screen() -> bool:
             p2 = st.text_input("🔒 تأكيد كلمة المرور",   type="password", key="rp2")
             save = st.button("💾 حفظ كلمة المرور", key="rp_save")
             st.markdown('</div>', unsafe_allow_html=True)
-
             if save:
                 if not p1 or p1 != p2:
                     st.error("كلمتا المرور غير متطابقتين أو فارغتين.")
@@ -1209,7 +1007,7 @@ def auth_screen() -> bool:
                     else:
                         st.error("❌ فشل تحديث كلمة المرور.")
 
-        # ── REGISTER STEP 1 ───────────────────────────────────────────────────
+        # ── REGISTER STEP 1 ────────────────────────────────────────────────
         elif scr == "r1":
             _sbar(3, 0)
             st.markdown('<div class="auth-box">', unsafe_allow_html=True)
@@ -1220,10 +1018,8 @@ def auth_screen() -> bool:
             pw2 = st.text_input("🔒 التأكيد *",     type="password", key="r1p2")
             nxt = st.button("التالي ←", key="r1nx")
             st.markdown('</div>', unsafe_allow_html=True)
-
             if st.button("← رجوع لتسجيل الدخول", key="r1bk"):
                 st.session_state["scr"] = "login"; st.rerun()
-
             if nxt:
                 errs = []
                 if not all([cn.strip(),em.strip(),pw1]): errs.append("جميع الحقول مطلوبة.")
@@ -1236,41 +1032,32 @@ def auth_screen() -> bool:
                         st.error("❌ هذا الإيميل مسجّل بالفعل.")
                     else:
                         otp = _gen_otp()
-                        # ── Send OTP via Resend — NEVER display on screen ────
                         with st.spinner("جاري إرسال رمز التحقق إلى بريدك الإلكتروني..."):
                             sent = send_verification_email(em.strip().lower(), otp)
                         st.session_state.update(
                             r_cn=cn.strip(), r_em=em.strip().lower(),
                             r_pw=pw1, r_otp=otp, scr="r_otp")
                         if sent:
-                            st.success(f"✅ تم إرسال رمز التحقق إلى **{em.strip()}**\n\n"
-                                       f"يرجى التحقق من بريدك الإلكتروني (وصندوق Spam).")
+                            st.success(f"✅ تم إرسال رمز التحقق إلى **{em.strip()}**")
                         else:
-                            # Resend failed — warn but continue (OTP still in session)
-                            st.warning("⚠️ تعذّر إرسال الإيميل. "
-                                       "يرجى التواصل مع الدعم الفني أو المحاولة لاحقاً.")
+                            st.warning("⚠️ تعذّر إرسال الإيميل. تواصل مع الدعم الفني.")
                         st.rerun()
 
-        # ── REGISTER OTP ──────────────────────────────────────────────────────
+        # ── REGISTER OTP ────────────────────────────────────────────────────
         elif scr == "r_otp":
             _sbar(3, 1)
             st.markdown('<div class="auth-box">', unsafe_allow_html=True)
             st.markdown('<div class="sec">الخطوة 2 — تأكيد الهوية</div>', unsafe_allow_html=True)
-            # ── OTP is NEVER shown here — sent only to email ──────────────────
             st.markdown(
                 f'<div style="background:rgba(232,160,32,.08);border:1px solid rgba(232,160,32,.2);'
-                f'border-radius:var(--r);padding:.75rem 1rem;margin-bottom:.75rem;'
-                f'font-size:.84rem;color:var(--t2);">'
+                f'border-radius:var(--r);padding:.75rem 1rem;margin-bottom:.75rem;font-size:.84rem;color:var(--t2);">'
                 f'📨 تم إرسال رمز التحقق إلى:<br>'
                 f'<b style="color:var(--gold)">{st.session_state.get("r_em","")}</b><br>'
-                f'<span style="font-size:.74rem;color:var(--t3);">'
-                f'يرجى التحقق من صندوق الوارد وصندوق Spam</span>'
-                f'</div>',
-                unsafe_allow_html=True)
+                f'<span style="font-size:.74rem;color:var(--t3);">يرجى التحقق من صندوق الوارد وصندوق Spam</span>'
+                f'</div>', unsafe_allow_html=True)
             oi  = st.text_input("🔑 أدخل رمز التحقق (6 أرقام)", key="rO",
                                 max_chars=6, placeholder="······")
             v   = st.button("تحقق والمتابعة ←", key="rOv")
-            # Resend OTP option
             if st.button("📨 إعادة إرسال الرمز", key="rOresend"):
                 new_otp = _gen_otp()
                 with st.spinner("جاري إعادة الإرسال..."):
@@ -1279,25 +1066,23 @@ def auth_screen() -> bool:
                     st.session_state["r_otp"] = new_otp
                     st.success("✅ تم إرسال رمز جديد إلى بريدك.")
                 else:
-                    st.error("❌ فشل إعادة الإرسال. تحقق من الاتصال.")
+                    st.error("❌ فشل إعادة الإرسال.")
             st.markdown('</div>', unsafe_allow_html=True)
             if st.button("← رجوع", key="rObk"):
                 st.session_state["scr"] = "r1"; st.rerun()
             if v:
                 if oi.strip() != st.session_state.get("r_otp",""):
-                    st.error("❌ الرمز غير صحيح. تحقق من بريدك الإلكتروني.")
+                    st.error("❌ الرمز غير صحيح.")
                 else:
                     st.session_state["scr"] = "r2"; st.rerun()
 
-        # ── REGISTER STEP 2 ───────────────────────────────────────────────────
+        # ── REGISTER STEP 2 ────────────────────────────────────────────────
         elif scr == "r2":
             _sbar(3, 2)
             st.markdown('<div class="auth-box">', unsafe_allow_html=True)
             st.markdown('<div class="sec">الخطوة 3 — معلومات حساب المدير</div>', unsafe_allow_html=True)
             fn  = st.text_input("👤 الاسم الكامل للمدير *", key="r2fn")
-            un  = st.text_input("🏷️ اسم المستخدم *",
-                                placeholder="مثال: ahmed_manager", key="r2un")
-            # No plan selection — system is fully open
+            un  = st.text_input("🏷️ اسم المستخدم *", placeholder="مثال: ahmed_manager", key="r2un")
             fin = st.button("✅ إنشاء الحساب", key="r2cr")
             st.markdown('</div>', unsafe_allow_html=True)
             if st.button("← رجوع", key="r2bk"):
@@ -1306,14 +1091,10 @@ def auth_screen() -> bool:
                 if not all([fn.strip(), un.strip()]):
                     st.error("يرجى تعبئة جميع الحقول.")
                 else:
-                    _complete_reg(
-                        fn.strip(),
-                        un.strip().lower(),
-                        st.session_state["r_cn"],
-                        st.session_state["r_em"],
-                        st.session_state["r_pw"],
-                        # No plan argument
-                    )
+                    _complete_reg(fn.strip(), un.strip().lower(),
+                                  st.session_state["r_cn"],
+                                  st.session_state["r_em"],
+                                  st.session_state["r_pw"])
 
         st.markdown(
             f'<div style="text-align:center;margin-top:1rem;color:var(--t3);font-size:.62rem">'
@@ -1324,13 +1105,7 @@ def auth_screen() -> bool:
 
 
 def _do_login(idn: str, pw: str):
-    """
-    Simple, direct login — queries users table directly (no cache).
-    Works with both email and username.
-    Sets session state on success and reruns.
-    """
-
-    # ── Platform super-admin (hard-coded, never in DB) ────────────────────
+    # Platform super-admin
     if idn.strip().lower() in (SA_EMAIL.lower(), "superadmin", "admin"):
         if pw == SA_PASS:
             st.session_state.update(
@@ -1342,35 +1117,25 @@ def _do_login(idn: str, pw: str):
             st.error("❌ كلمة المرور غير صحيحة.")
         return
 
-    # ── Direct DB lookup — no cache, no complex logic ─────────────────────
     pw_hash = _h(pw)
     idn_lc  = idn.strip().lower()
+    user    = None
 
-    user = None
-
-    # Try email match
     rows = _get_direct("users", {"email": idn_lc, "password": pw_hash})
     if rows:
-        # Filter is_active client-side (handles bool True/1 variants)
-        user = next(
-            (u for u in rows if u.get("is_active") not in (False, 0, "false")),
-            None
-        )
+        user = next((u for u in rows
+                     if u.get("is_active") not in (False, 0, "false")), None)
 
-    # Try username match if email failed
     if not user:
         rows = _get_direct("users", {"username": idn_lc, "password": pw_hash})
         if rows:
-            user = next(
-                (u for u in rows if u.get("is_active") not in (False, 0, "false")),
-                None
-            )
+            user = next((u for u in rows
+                         if u.get("is_active") not in (False, 0, "false")), None)
 
     if not user:
         st.error("❌ بيانات غير صحيحة أو الحساب موقوف.")
         return
 
-    # ── Resolve workspace name (best-effort, non-blocking) ────────────────
     ws_id   = user.get("workspace_id") or 0
     ws_name = ""
     try:
@@ -1380,110 +1145,63 @@ def _do_login(idn: str, pw: str):
     except Exception:
         ws_name = ""
 
-    # ── Set session state and enter app ───────────────────────────────────
     st.session_state.update(
-        auth=True,
-        uid=user["id"],
+        auth=True, uid=user["id"],
         uname=user.get("full_name", idn_lc),
         role=user.get("role", "sales"),
         workspace_id=ws_id,
-        workspace_name=ws_name,
-    )
-    # Clear any leftover registration state
-    for k in ("scr", "r_cn", "r_em", "r_pw", "r_otp"):
+        workspace_name=ws_name)
+    for k in ("scr","r_cn","r_em","r_pw","r_otp"):
         st.session_state.pop(k, None)
-
     st.rerun()
 
 
 def _complete_reg(full_name, username, company, email, pw):
-    """
-    Register a new admin + workspace.
-    Strategy:
-      1. Build slug from company name (alphanumeric only).
-      2. SELECT workspace by slug — if found, reuse its id.
-      3. If NOT found, INSERT new workspace and get the new id.
-      4. INSERT user linked to that workspace_id.
-      5. Full try/except + real error display at every step.
-    No plan field — system is fully open.
-    """
     import re
-    # Build a safe slug: Arabic letters map to their transliterated equivalents aren't
-    # needed — we just strip non-alphanumeric and use the result; unique per company name.
     slug = re.sub(r"[^a-zA-Z0-9\u0600-\u06FF]", "-", company.strip().lower())
     slug = re.sub(r"-{2,}", "-", slug).strip("-") or "ws"
 
     try:
-        # ── Step 1: check if workspace (slug) already exists ─────────────────
         existing_ws = _get("workspaces", {"slug": slug}, single=True)
 
         if existing_ws and isinstance(existing_ws, dict) and "id" in existing_ws:
-            # Reuse existing workspace — don't duplicate
             ws_id   = existing_ws["id"]
             ws_name = existing_ws.get("name", company)
         else:
-            # ── Step 2: create new workspace ─────────────────────────────────
             ws_result = _post("workspaces", {
-                "name":      company.strip(),
-                "slug":      slug,
-                "is_active": True,
-                # No "plan" field — system is open
-            })
-
-            # Guard: check for error or missing id
+                "name": company.strip(), "slug": slug, "is_active": True})
             if ws_result is None:
-                st.error("❌ لم يُرجع Supabase أي استجابة عند إنشاء الشركة. تحقق من الاتصال.")
-                return
+                st.error("❌ لم يُرجع Supabase أي استجابة عند إنشاء الشركة."); return
             if isinstance(ws_result, dict) and ws_result.get("__error__"):
-                err = _post_err(ws_result)
-                st.error(f"❌ فشل إنشاء الشركة.\n\nالخطأ الحقيقي من Supabase:\n`{err}`")
-                return
+                st.error(f"❌ فشل إنشاء الشركة.\n`{_post_err(ws_result)}`"); return
             if not isinstance(ws_result, dict) or "id" not in ws_result:
-                st.error(f"❌ استجابة غير متوقعة من Supabase: `{ws_result}`")
-                return
-
+                st.error(f"❌ استجابة غير متوقعة: `{ws_result}`"); return
             ws_id   = ws_result["id"]
             ws_name = company.strip()
 
-        # ── Step 3: create admin user ─────────────────────────────────────────
         user_result = _post("users", {
-            "workspace_id": ws_id,
-            "full_name":    full_name,
-            "username":     username,
-            "email":        email,
-            "password":     _h(pw),
-            "role":         "admin",
-            "created_by":   0,
-            "is_active":    True,
-        })
+            "workspace_id": ws_id, "full_name": full_name,
+            "username": username, "email": email,
+            "password": _h(pw), "role": "admin",
+            "created_by": 0, "is_active": True})
 
         if user_result is None:
-            st.error("❌ لم يُرجع Supabase أي استجابة عند إنشاء المستخدم.")
-            return
+            st.error("❌ لم يُرجع Supabase أي استجابة عند إنشاء المستخدم."); return
         if isinstance(user_result, dict) and user_result.get("__error__"):
-            err = _post_err(user_result)
-            st.error(f"❌ فشل إنشاء الحساب.\n\nالخطأ الحقيقي من Supabase:\n`{err}`")
-            return
+            st.error(f"❌ فشل إنشاء الحساب.\n`{_post_err(user_result)}`"); return
         if not isinstance(user_result, dict) or "id" not in user_result:
-            st.error(f"❌ استجابة غير متوقعة للمستخدم: `{user_result}`")
-            return
+            st.error(f"❌ استجابة غير متوقعة: `{user_result}`"); return
 
-        # ── Step 4: success ───────────────────────────────────────────────────
-        st.success(
-            f"🎉 تم إنشاء حسابك بنجاح!\n\n"
-            f"**الشركة:** {ws_name}\n"
-            f"**اسم المستخدم:** {username}\n\n"
-            f"سجّل دخولك الآن بالإيميل أو اسم المستخدم.")
+        st.success(f"🎉 تم إنشاء حسابك بنجاح!\n\n**الشركة:** {ws_name}\n**اسم المستخدم:** {username}\n\nسجّل دخولك الآن.")
         for k in ("scr","r_cn","r_em","r_pw","r_otp"):
             st.session_state.pop(k, None)
-        st.session_state["scr"] = "login"
-        st.rerun()
+        st.session_state["scr"] = "login"; st.rerun()
 
     except KeyError as ke:
-        st.error(f"❌ خطأ برمجي (KeyError): المفتاح `{ke}` غير موجود في الاستجابة. "
-                 f"تأكد من وجود جميع أعمدة جدول workspaces في Supabase.")
+        st.error(f"❌ خطأ برمجي (KeyError): `{ke}`")
     except Exception as ex:
-        st.error(f"❌ خطأ غير متوقع أثناء التسجيل: `{type(ex).__name__}: {ex}`")
+        st.error(f"❌ خطأ غير متوقع: `{type(ex).__name__}: {ex}`")
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  TOP NAVIGATION
@@ -1497,7 +1215,6 @@ def top_nav() -> str:
     init  = "".join(w[0] for w in uname.split()[:2]).upper() or "?"
     pages = ROLE_PAGES.get(role, [])
 
-    # Unread notifications count
     if role != "superadmin":
         notifs = _get("notifications", {"workspace_id":wid(),"is_read":False},
                       order="id.desc", limit=50)
@@ -1508,7 +1225,6 @@ def top_nav() -> str:
     else:
         n_count = 0
 
-    # ── App Badging API — updates icon badge on Android/Desktop PWA ──────────
     st.markdown(
         f'<script>if(window.zSetBadge) window.zSetBadge({n_count});</script>',
         unsafe_allow_html=True)
@@ -1549,6 +1265,7 @@ def top_nav() -> str:
             st.rerun()
     return active
 
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  NOTIFICATIONS PAGE
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1574,7 +1291,6 @@ def pg_notifications():
                 _patch("notifications", {"id": n["id"]}, {"is_read": True})
             _get_cached.clear(); st.rerun()
 
-    # ── Track which notification is expanded to show order details ──────────
     if "notif_order_id" not in st.session_state:
         st.session_state["notif_order_id"] = None
 
@@ -1582,49 +1298,36 @@ def pg_notifications():
         for n in lst:
             rdcls = "unread" if not n.get("is_read") else ""
             dot   = "notif-dot" if not n.get("is_read") else "notif-dot read"
-
-            # Notification card HTML
             st.markdown(
                 f'<div class="notif-item {rdcls}">'
                 f'<div class="{dot}"></div>'
                 f'<div style="flex:1">'
-                f'<div style="font-size:.85rem;font-weight:600;color:var(--t1)">'
-                f'{n.get("title","")}</div>'
-                f'<div style="font-size:.78rem;color:var(--t2);margin-top:2px">'
-                f'{n.get("body","")}</div>'
-                f'<div style="font-size:.62rem;color:var(--t3);margin-top:4px">'
-                f'{str(n.get("created_at",""))[:16]}</div>'
-                f'</div></div>',
-                unsafe_allow_html=True)
+                f'<div style="font-size:.85rem;font-weight:600;color:var(--t1)">{n.get("title","")}</div>'
+                f'<div style="font-size:.78rem;color:var(--t2);margin-top:2px">{n.get("body","")}</div>'
+                f'<div style="font-size:.62rem;color:var(--t3);margin-top:4px">{str(n.get("created_at",""))[:16]}</div>'
+                f'</div></div>', unsafe_allow_html=True)
 
-            # Action buttons — only mark as read, no broken order-view
             btn_col1, btn_col2 = st.columns([1, 3])
             with btn_col1:
                 if not n.get("is_read"):
                     if st.button("📖 قراءة", key=f"rd_{n['id']}"):
                         _patch("notifications", {"id": n["id"]}, {"is_read": True})
-                        _get_cached.clear()
-                        st.rerun()
+                        _get_cached.clear(); st.rerun()
 
-            # If this notification links to an order — show details button
             order_id = n.get("order_id")
             if order_id:
                 with btn_col2:
-                    btn_key = f"view_order_{n['id']}"
-                    if st.button(f"📋 عرض الطلب #{order_id}", key=btn_key):
-                        # Toggle: show or hide
+                    if st.button(f"📋 عرض الطلب #{order_id}", key=f"view_order_{n['id']}"):
                         if st.session_state["notif_order_id"] == order_id:
                             st.session_state["notif_order_id"] = None
                         else:
                             st.session_state["notif_order_id"] = order_id
 
-            # ── Show order details INLINE — clean Streamlit calls only ───────
             if order_id and st.session_state.get("notif_order_id") == order_id:
                 order_data = _get("orders", {"id": order_id}, single=True)
                 if order_data and isinstance(order_data, dict):
                     st.markdown("---")
                     st.subheader(f"📋 تفاصيل الطلب  #{order_data.get('order_number','—')}")
-
                     c1, c2 = st.columns(2)
                     c1.markdown(f"**العميل:** {order_data.get('customer_name','—')}")
                     c1.markdown(f"**الهاتف:** {order_data.get('customer_phone','—')}")
@@ -1634,37 +1337,24 @@ def pg_notifications():
                     c2.markdown(f"**النشاط:** {order_data.get('paper_type','—')}")
                     c2.markdown(f"**التاريخ:** {str(order_data.get('created_at','—'))[:16]}")
                     c2.markdown(f"**أضافه:** {order_data.get('created_by_name','—')}")
-
                     if order_data.get("description"):
-                        st.info(f"📝 التفاصيل: {order_data.get('description','')}")
-
-                    if order_data.get("total_price"):
-                        st.markdown(f"**السعر الكلي:** {order_data.get('total_price','—')} "
-                                    f"| **المدفوع:** {order_data.get('paid','—')}")
-
-                    if order_data.get("delivery_date"):
-                        st.markdown(f"**تاريخ التسليم:** {order_data.get('delivery_date','—')}")
-
+                        st.info(f"📝 {order_data.get('description','')}")
                     st.markdown("---")
                 else:
                     st.warning("لم يتم العثور على تفاصيل هذا الطلب.")
-
-            st.markdown("")  # spacer between notifications
+            st.markdown("")
 
     t1, t2 = st.tabs([
         f"🔴 غير مقروءة ({len(unread)})",
         f"✅ مقروءة ({len(read)})"
     ])
     with t1:
-        if unread:
-            _render_notif_list(unread)
-        else:
-            st.success("🎉 لا توجد إشعارات جديدة!")
+        if unread: _render_notif_list(unread)
+        else: st.success("🎉 لا توجد إشعارات جديدة!")
     with t2:
-        if read:
-            _render_notif_list(read)
-        else:
-            st.info("لا توجد إشعارات مقروءة.")
+        if read: _render_notif_list(read)
+        else: st.info("لا توجد إشعارات مقروءة.")
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  SUPER-ADMIN PAGES
@@ -1692,7 +1382,8 @@ def pg_sa_dash():
             df = pd.DataFrame(ws_all)
             if "is_active" in df.columns:
                 df["is_active"] = df["is_active"].map({True:"✅",False:"🚫",1:"✅",0:"🚫"})
-            st.dataframe(df[["id","name","plan","is_active","created_at"]].rename(columns={
+            cols = [c for c in ["id","name","plan","is_active","created_at"] if c in df.columns]
+            st.dataframe(df[cols].rename(columns={
                 "id":"#","name":"الشركة","plan":"الخطة","is_active":"نشطة","created_at":"التاريخ"
             }), use_container_width=True, hide_index=True)
     with t2:
@@ -1712,7 +1403,8 @@ def pg_sa_companies():
         df = pd.DataFrame(ws_all)
         if "is_active" in df.columns:
             df["is_active"] = df["is_active"].map({True:"✅",False:"🚫",1:"✅",0:"🚫"})
-        st.dataframe(df[["id","name","slug","plan","is_active","created_at"]].rename(columns={
+        cols = [c for c in ["id","name","slug","plan","is_active","created_at"] if c in df.columns]
+        st.dataframe(df[cols].rename(columns={
             "id":"#","name":"الشركة","slug":"Slug","plan":"الخطة",
             "is_active":"نشطة","created_at":"التاريخ"
         }), use_container_width=True, hide_index=True)
@@ -1720,7 +1412,8 @@ def pg_sa_companies():
     st.markdown('<div class="sec">➕ شركة جديدة + مديرها</div>', unsafe_allow_html=True)
     with st.form("add_ws", clear_on_submit=True):
         c1,c2 = st.columns(2)
-        wn = c1.text_input("اسم الشركة *"); pl = c2.selectbox("الخطة",["starter","pro","enterprise"])
+        wn = c1.text_input("اسم الشركة *")
+        pl = c2.selectbox("الخطة",["starter","pro","enterprise"])
         st.markdown('<div class="sec">بيانات مدير الشركة</div>', unsafe_allow_html=True)
         c3,c4 = st.columns(2)
         afn = c3.text_input("اسم المدير *"); aun = c4.text_input("اسم المستخدم *")
@@ -1732,23 +1425,30 @@ def pg_sa_companies():
         else:
             slug = "".join(c if c.isalnum() else "-" for c in wn.lower())
             ws   = _post("workspaces",{"name":wn.strip(),"slug":slug,"plan":pl,"is_active":True})
-            if ws:
+            if ws and isinstance(ws, dict) and "id" in ws:
                 u = _post("users",{"workspace_id":ws["id"],"full_name":afn.strip(),
                                    "username":aun.strip().lower(),"email":aem.strip().lower(),
                                    "password":_h(apw),"role":"admin","created_by":0,"is_active":True})
-                if u: st.success(f"✅ تم إنشاء **{wn}** والمدير **{afn}**!"); st.rerun()
+                if u and isinstance(u, dict) and "id" in u:
+                    st.success(f"✅ تم إنشاء **{wn}** والمدير **{afn}**!"); st.rerun()
+                else:
+                    st.error(f"❌ فشل إنشاء المدير: {_post_err(u)}")
+            else:
+                st.error(f"❌ فشل إنشاء الشركة: {_post_err(ws)}")
 
 
 def pg_sa_users():
     hdr("👥","جميع المستخدمين","عرض عبر كل الشركات")
     rows = _get("users", order="workspace_id.asc,id.asc")
     if rows:
-        df = pd.DataFrame(rows)[["id","workspace_id","full_name","username","email","role","is_active","created_at"]]
+        df = pd.DataFrame(rows)
+        cols = [c for c in ["id","workspace_id","full_name","username","email","role","is_active","created_at"] if c in df.columns]
         df["is_active"] = df["is_active"].map({True:"✅",False:"🚫",1:"✅",0:"🚫"})
-        st.dataframe(df.rename(columns={"id":"#","workspace_id":"WS","full_name":"الاسم",
-                                        "username":"المستخدم","email":"الإيميل","role":"الدور",
-                                        "is_active":"نشط","created_at":"التاريخ"}),
-                     use_container_width=True, hide_index=True)
+        st.dataframe(df[cols].rename(columns={
+            "id":"#","workspace_id":"WS","full_name":"الاسم",
+            "username":"المستخدم","email":"الإيميل","role":"الدور",
+            "is_active":"نشط","created_at":"التاريخ"}),
+            use_container_width=True, hide_index=True)
 
 
 def pg_sa_stats():
@@ -1765,6 +1465,7 @@ def pg_sa_stats():
                      "إيراد (د.ع)":f"{rev:,.0f}"})
     data.sort(key=lambda x: x["الأوردرات"], reverse=True)
     st.dataframe(pd.DataFrame(data), use_container_width=True, hide_index=True)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  WORKSPACE ADMIN PAGES
@@ -1797,27 +1498,31 @@ def pg_admin_dash():
     with t1:
         last = sorted(orders,key=lambda x:x.get("id",0),reverse=True)[:12]
         if last:
-            df = pd.DataFrame(last)[["order_number","customer_name","total_price","paid","remaining","status","created_at"]]
-            st.dataframe(df.rename(columns={"order_number":"الأوردر","customer_name":"العميل",
-                                            "total_price":"السعر","paid":"المدفوع","remaining":"المتبقي",
-                                            "status":"الحالة","created_at":"التاريخ"}),
-                         use_container_width=True, hide_index=True)
+            df = pd.DataFrame(last)
+            cols = [c for c in ["order_number","customer_name","total_price","paid","remaining","status","created_at"] if c in df.columns]
+            st.dataframe(df[cols].rename(columns={
+                "order_number":"الأوردر","customer_name":"العميل",
+                "total_price":"السعر","paid":"المدفوع","remaining":"المتبقي",
+                "status":"الحالة","created_at":"التاريخ"}),
+                use_container_width=True, hide_index=True)
         else: st.info("لا توجد أوردرات.")
     with t2:
         if prs:
-            df = pd.DataFrame(prs)[["requester_name","department","item_name","quantity","urgency","status","created_at"]]
-            st.dataframe(df.rename(columns={"requester_name":"الموظف","department":"القسم",
-                                            "item_name":"الصنف","quantity":"الكمية","urgency":"الأولوية",
-                                            "status":"الحالة","created_at":"التاريخ"}),
-                         use_container_width=True, hide_index=True)
+            df = pd.DataFrame(prs)
+            cols = [c for c in ["requester_name","department","item_name","quantity","urgency","status","created_at"] if c in df.columns]
+            st.dataframe(df[cols].rename(columns={
+                "requester_name":"الموظف","department":"القسم","item_name":"الصنف",
+                "quantity":"الكمية","urgency":"الأولوية","status":"الحالة","created_at":"التاريخ"}),
+                use_container_width=True, hide_index=True)
         else: st.info("لا توجد طلبات.")
     with t3:
         if irs:
-            df = pd.DataFrame(irs)[["reporter_name","department","description","severity","status","created_at"]]
-            st.dataframe(df.rename(columns={"reporter_name":"المبلّغ","department":"القسم",
-                                            "description":"الوصف","severity":"الخطورة",
-                                            "status":"الحالة","created_at":"التاريخ"}),
-                         use_container_width=True, hide_index=True)
+            df = pd.DataFrame(irs)
+            cols = [c for c in ["reporter_name","department","description","severity","status","created_at"] if c in df.columns]
+            st.dataframe(df[cols].rename(columns={
+                "reporter_name":"المبلّغ","department":"القسم","description":"الوصف",
+                "severity":"الخطورة","status":"الحالة","created_at":"التاريخ"}),
+                use_container_width=True, hide_index=True)
         else: st.success("🎉 لا بلاغات!")
 
 
@@ -1829,12 +1534,13 @@ def pg_team():
     WID  = wid()
     rows = _get("users",{"workspace_id":WID},order="id.asc")
     if rows:
-        df = pd.DataFrame(rows)[["id","full_name","username","email","role","is_active","created_at"]]
+        df = pd.DataFrame(rows)
+        cols = [c for c in ["id","full_name","username","email","role","is_active","created_at"] if c in df.columns]
         df["is_active"] = df["is_active"].map({True:"✅ نشط",False:"🚫 موقوف",1:"✅ نشط",0:"🚫 موقوف"})
-        st.dataframe(df.rename(columns={"id":"#","full_name":"الاسم","username":"المستخدم",
-                                        "email":"الإيميل","role":"الدور","is_active":"الحالة",
-                                        "created_at":"التاريخ"}),
-                     use_container_width=True, hide_index=True)
+        st.dataframe(df[cols].rename(columns={
+            "id":"#","full_name":"الاسم","username":"المستخدم",
+            "email":"الإيميل","role":"الدور","is_active":"الحالة","created_at":"التاريخ"}),
+            use_container_width=True, hide_index=True)
     st.markdown("---")
     st.markdown('<div class="sec">➕ إضافة موظف جديد</div>', unsafe_allow_html=True)
     with st.form("add_emp", clear_on_submit=True):
@@ -1860,8 +1566,10 @@ def pg_team():
                                  "username":un.strip().lower(),"email":em.strip().lower(),
                                  "password":_h(p1),"role":rl,
                                  "created_by":st.session_state["uid"],"is_active":True})
-            if res: st.success(f"✅ تم إضافة **{fn}**!"); st.rerun()
-            else:   st.error("❌ اسم المستخدم أو الإيميل مستخدم بالفعل.")
+            if res and isinstance(res, dict) and "id" in res:
+                st.success(f"✅ تم إضافة **{fn}**!"); st.rerun()
+            else:
+                st.error(f"❌ فشل الإضافة: {_post_err(res)}")
     st.markdown("---")
     st.markdown('<div class="sec">🔄 تفعيل / تعطيل</div>', unsafe_allow_html=True)
     emp = [u for u in (rows or []) if u.get("role") != "admin"]
@@ -1892,16 +1600,17 @@ def pg_support():
         f'Developed by <b style="color:var(--gold)">{DEVELOPER}</b> · {APP_NAME} v{APP_VER}</div>',
         unsafe_allow_html=True)
 
+
 # ══════════════════════════════════════════════════════════════════════════════
 #  SALES PAGES
 # ══════════════════════════════════════════════════════════════════════════════
 
 def pg_sales_dash():
     hdr("📊","لوحتي","أوردراتك وإحصائياتك")
-    guide("① أضف أوردراً من «أوردر جديد» — النموذج الكامل<br>"
+    guide("① أضف أوردراً من «أوردر جديد»<br>"
           "② السعر والمبلغ المدفوع سري — لا يظهر لباقي الأقسام<br>"
           "③ معاينة التصاميم من «التصاميم»")
-    uid  = st.session_state["uid"]; WID = wid()
+    uid    = st.session_state["uid"]; WID = wid()
     orders = _get("orders",{"workspace_id":WID,"created_by_id":uid})
     tot  = len(orders)
     dn   = sum(1 for o in orders if o.get("status")=="تم التسليم")
@@ -1918,59 +1627,33 @@ def pg_add_order():
     hdr("➕","أوردر جديد — Z-ORDER V2","أدخل تفاصيل الطلب يدوياً بحرية كاملة")
 
     with st.form("new_order_v2", clear_on_submit=True):
-
-        # ── بيانات العميل ─────────────────────────────────────────────────
         st.markdown('<div class="sec">👤 بيانات العميل</div>', unsafe_allow_html=True)
         c1, c2 = st.columns(2)
-        cust  = c1.text_input("اسم العميل *",     placeholder="مثال: أحمد محمد")
-        phone = c2.text_input("رقم الهاتف",       placeholder="مثال: 07901234567")
+        cust  = c1.text_input("اسم العميل *",    placeholder="مثال: أحمد محمد")
+        phone = c2.text_input("رقم الهاتف",      placeholder="مثال: 07901234567")
 
-        # ── تفاصيل الطلب ──────────────────────────────────────────────────
         st.markdown('<div class="sec">🖨️ تفاصيل الطلب</div>', unsafe_allow_html=True)
         c3, c4 = st.columns(2)
-        qty_txt  = c3.text_input("الكمية *",
-                                  placeholder="مثال: 500 كارت، 3 أمتار، 10 لفات")
-        size_txt = c4.text_input("القياس",
-                                  placeholder="مثال: A4، 50×70 سم، 90×50 مم")
+        qty_txt  = c3.text_input("الكمية *",  placeholder="مثال: 500 كارت، 3 أمتار")
+        size_txt = c4.text_input("القياس",    placeholder="مثال: A4، 50×70 سم")
+        biz  = st.text_input("النشاط التجاري", placeholder="مثال: مطعم، محل ملابس")
+        desc = st.text_area("التفاصيل", placeholder="ألوان الطباعة، عدد الوجوه، نوع الورق...", height=100)
 
-        biz = st.text_input("النشاط التجاري",
-                             placeholder="مثال: مطعم، محل ملابس، شركة إنشاء")
-
-        desc = st.text_area("التفاصيل",
-                             placeholder="ألوان الطباعة، عدد الوجوه، نوع الورق، ملاحظات...",
-                             height=100)
-
-        # ── التسعير والدفع (نصي حر) ────────────────────────────────────────
         st.markdown('<div class="sec">💰 التسعير والدفع (د.ع)</div>', unsafe_allow_html=True)
         c5, c6 = st.columns(2)
-        total_p_txt = c5.text_input(
-            "السعر الكلي (د.ع) *",
-            placeholder="مثال: 25,000 د.ع",
-            help="اكتب السعر بحرية مع رمز العملة إن أردت"
-        )
-        paid_txt = c6.text_input(
-            "المبلغ المدفوع (د.ع)",
-            placeholder="مثال: 10,000 د.ع",
-            help="المبلغ الذي دفعه العميل مقدماً"
-        )
+        total_p_txt = c5.text_input("السعر الكلي (د.ع) *", placeholder="مثال: 25,000 د.ع")
+        paid_txt    = c6.text_input("المبلغ المدفوع (د.ع)", placeholder="مثال: 10,000 د.ع")
 
-        # ── التاريخ ────────────────────────────────────────────────────────
         st.markdown('<div class="sec">📅 التاريخ</div>', unsafe_allow_html=True)
-        order_date = st.date_input(
-            "تاريخ الطلب",
-            value=datetime.date.today(),
-            help="تاريخ استلام الطلب — الافتراضي هو اليوم"
-        )
+        order_date = st.date_input("تاريخ الطلب", value=datetime.date.today())
 
         sub = st.form_submit_button("✅ حفظ الأوردر", use_container_width=True)
 
-    # ── معالجة الإرسال ─────────────────────────────────────────────────────
     if sub:
         errors = []
-        if not cust.strip():       errors.append("اسم العميل مطلوب.")
-        if not qty_txt.strip():    errors.append("الكمية مطلوبة.")
+        if not cust.strip():        errors.append("اسم العميل مطلوب.")
+        if not qty_txt.strip():     errors.append("الكمية مطلوبة.")
         if not total_p_txt.strip(): errors.append("السعر الكلي مطلوب.")
-
         if errors:
             for e in errors: st.error(e)
         else:
@@ -1984,9 +1667,9 @@ def pg_add_order():
                 "size":            size_txt.strip(),
                 "paper_type":      biz.strip(),
                 "description":     desc.strip(),
-                "total_price":     total_p_txt.strip(),   # نصي مع العملة
-                "paid":            paid_txt.strip(),       # نصي مع العملة
-                "remaining":       "",                     # يُحسب يدوياً أو يُترك فارغاً
+                "total_price":     total_p_txt.strip(),
+                "paid":            paid_txt.strip(),
+                "remaining":       "",
                 "delivery_date":   str(order_date),
                 "created_by_id":   st.session_state["uid"],
                 "created_by_name": st.session_state["uname"],
@@ -1995,18 +1678,11 @@ def pg_add_order():
                 "production_status":"قيد الانتظار",
                 "delivered":       False,
             })
-
-            if res:
-                _push_notification(
-                    wid(),
-                    f"أوردر جديد: {ono}",
-                    f"العميل: {cust.strip()} | الكمية: {qty_txt.strip()}",
-                    target_roles=["design"],
-                    order_id=res.get("id"),
-                )
+            if res and isinstance(res, dict) and "id" in res:
+                _push_notification(wid(), f"أوردر جديد: {ono}",
+                                   f"العميل: {cust.strip()} | الكمية: {qty_txt.strip()}",
+                                   target_roles=["design"], order_id=res.get("id"))
                 st.success(f"✅ تم حفظ الأوردر **{ono}** بنجاح!")
-
-                # ملخص الأوردر
                 st.markdown(
                     f'<div class="order-summary"><table>'
                     f'<tr><td>رقم الأوردر</td><td>{ono}</td></tr>'
@@ -2018,54 +1694,20 @@ def pg_add_order():
                     f'<tr><td>التاريخ</td><td>{order_date}</td></tr>'
                     f'<tr class="total-row"><td>السعر الكلي</td><td>{total_p_txt.strip()}</td></tr>'
                     f'<tr><td>المدفوع</td><td>{paid_txt.strip() or "—"}</td></tr>'
-                    f'</table></div>',
-                    unsafe_allow_html=True,
-                )
+                    f'</table></div>', unsafe_allow_html=True)
+            else:
+                st.error(f"❌ فشل حفظ الأوردر: {_post_err(res)}")
 
-
-def pg_sales_preview():
-    hdr("🖼️","معاينة التصاميم","ملفات التصميم المرفوعة قبل الطباعة")
-    guide("① شاهد التصميم وحمّله للتأكد قبل إرساله للإنتاج<br>"
-          "② الملفات محفوظة في Supabase Storage")
-    rows = _get("orders",{"workspace_id":wid(),"design_status":"مكتمل"},order="id.desc")
-    if not rows: st.info("لا توجد تصاميم مكتملة بعد."); return
-    for r in rows:
-        with st.expander(f"🎨 {r.get('order_number','')} — {r.get('customer_name','')}"):
-            c1,c2 = st.columns(2)
-            c1.markdown(f"**الورق:** {r.get('paper_type','')} · {r.get('size','')}")
-            c1.markdown(f"**الكمية:** {r.get('quantity','')}")
-            c2.markdown(f"**صمّمه:** {r.get('design_by','—')}")
-            c2.markdown(f"**تاريخ التصميم:** {str(r.get('design_updated','—'))[:16]}")
-            if r.get("design_notes"):
-                st.markdown(f"**ملاحظات:** {r['design_notes']}")
-            st.markdown("---")
-            fu = r.get("design_file_url","") or r.get("design_link","")
-            if fu:
-                _dl_btn(fu,"⬇️ تحميل ملف التصميم")
-                ext = fu.split(".")[-1].lower()
-                if ext in ["png","jpg","jpeg","webp"]:
-                    try:
-                        rr = requests.get(fu, timeout=15)
-                        if rr.status_code == 200:
-                            st.image(rr.content, use_container_width=True)
-                    except Exception: pass
-            else: st.caption("لا يوجد ملف بعد.")
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  DESIGN PAGE
+#  DESIGN PAGE  ★ FIXED — uses ACTIVE_KEY for all reads, writes, uploads ★
 # ══════════════════════════════════════════════════════════════════════════════
 
 def pg_design():
     """
-    Design department main page — v3 (nuclear fix).
-
-    ROOT CAUSE OF MISSING ORDERS:
-    - The publishable anon key is blocked by Supabase RLS from reading orders.
-    - Solution A: Add SUPA_SERVICE_KEY to Streamlit Secrets (recommended).
-    - Solution B: Run in Supabase SQL Editor:
-        ALTER TABLE orders DISABLE ROW LEVEL SECURITY;
-    - This page fetches ALL orders (no workspace filter) in fallback mode
-      to diagnose and show orders regardless of RLS restrictions.
+    Design department — fetches orders using ACTIVE_KEY (service role key).
+    RLS must be disabled OR SUPA_SERVICE_KEY must be set in Streamlit Secrets.
+    Both conditions are met per project setup.
     """
     hdr("🎨", "قسم التصميم", "جميع الطلبات التي تحتاج تصميم")
     guide(
@@ -2076,10 +1718,10 @@ def pg_design():
 
     WID = wid()
 
-    # ── Refresh ────────────────────────────────────────────────────────────
+    # ── Refresh button ────────────────────────────────────────────────────
     col_r, col_h = st.columns([1, 5])
     with col_r:
-        if st.button("🔄 تحديث الآن", key="design_refresh"):
+        if st.button("🔄 تحديث", key="design_refresh"):
             _get_cached.clear()
             st.rerun()
     with col_h:
@@ -2088,72 +1730,32 @@ def pg_design():
             'اضغط تحديث إذا لا ترى طلبات جديدة</div>',
             unsafe_allow_html=True)
 
-    # ══════════════════════════════════════════════════════════════════════
-    #  FETCH STRATEGY
-    #  Step 1: Try with workspace_id filter (normal operation)
-    #  Step 2: If zero rows returned, try WITHOUT filter (diagnose RLS/key issue)
-    #  Step 3: Show ALL orders that belong to this workspace
-    # ══════════════════════════════════════════════════════════════════════
+    # ── Fetch ALL orders for this workspace using ACTIVE_KEY ──────────────
+    # _get_direct always uses RH which has ACTIVE_KEY (service key).
+    # First try with workspace_id filter (normal path).
+    rows = _get_direct("orders", {"workspace_id": WID}, order="id.desc", limit=500)
 
-    # Attempt 1 — filtered by workspace
-    rows = _get_direct("orders", {"workspace_id": WID},
-                       order="id.desc", limit=500)
+    # If filtered query returned None (connection error), show error and stop.
+    if rows is None:
+        st.error("❌ تعذّر الاتصال بـ Supabase. تحقق من الإنترنت.")
+        return
 
-    fetch_error = rows is None
-    if fetch_error:
-        rows = []
-
-    # Attempt 2 — if filtered query returned nothing, try global fetch
-    all_rows_fallback = []
-    used_fallback = False
-    if not rows and not fetch_error:
-        all_rows_fallback = _get_direct("orders", {}, order="id.desc", limit=200) or []
-        if all_rows_fallback:
-            used_fallback = True
-            # Filter client-side for this workspace
-            rows = [r for r in all_rows_fallback if r.get("workspace_id") == WID]
-
-    # ══ DIAGNOSTIC EXPANDER ═══════════════════════════════════════════════
-    with st.expander("🔍 تشخيص قاعدة البيانات (للمطور)", expanded=(not rows)):
-        st.markdown(f"**Workspace ID في الجلسة:** `{WID}`  "
-                    f"| **نوع المفتاح:** `{'service' if ACTIVE_KEY != SUPA_KEY else 'anon/publishable'}`")
-        st.markdown(f"**الطلبات بعد الفلتر:** `{len(rows)}`  "
-                    f"| **وضع الاسترجاع:** `{'fallback-global' if used_fallback else 'workspace-filter'}`  "
-                    f"| **خطأ اتصال:** `{fetch_error}`")
-
-        if used_fallback and all_rows_fallback:
+    # If filtered query returned empty list, try unfiltered to detect RLS issues.
+    if not rows:
+        all_rows = _get_direct("orders", {}, order="id.desc", limit=200) or []
+        if all_rows:
+            # Orders exist but workspace filter returned nothing — RLS or wrong workspace_id
+            ws_ids_in_db = sorted({r.get("workspace_id") for r in all_rows})
             st.warning(
-                f"⚠️ الاستعلام بفلتر workspace_id لم يُرجع نتائج، "
-                f"لكن قاعدة البيانات تحتوي **{len(all_rows_fallback)} طلب** بدون فلتر.\n\n"
-                f"هذا يعني: إما أن الطلبات مُخزَّنة بـ workspace_id مختلف، "
-                f"أو أن RLS يمنع القراءة بالـ anon key.\n\n"
-                f"**الحل:** أضف إلى Supabase SQL Editor:\n"
-                f"```sql\nALTER TABLE orders DISABLE ROW LEVEL SECURITY;\n```\n"
-                f"أو أضف `SUPA_SERVICE_KEY` في Streamlit Secrets."
+                f"⚠️ لا توجد طلبات لـ workspace_id = **{WID}** في قاعدة البيانات.\n\n"
+                f"workspace_ids الموجودة: `{ws_ids_in_db}`\n\n"
+                f"تأكد أن الطلبات أُضيفت لنفس الـ workspace_id الخاص بحسابك."
             )
-            wids_in_db = sorted({r.get("workspace_id") for r in all_rows_fallback})
-            st.markdown(f"**workspace_ids الموجودة في قاعدة البيانات:** `{wids_in_db}`")
-            st.markdown(f"**workspace_id جلستك الحالية:** `{WID}`")
-
-        if fetch_error:
-            st.error(
-                "❌ تعذّر الاتصال بـ Supabase. "
-                "تحقق من الإنترنت وصلاحيات المفتاح (RLS).")
-
-        if rows:
-            ds_map, st_map = {}, {}
-            for r in rows:
-                ds = r.get("design_status") or "(null/فارغ)"
-                sv = r.get("status") or "(null/فارغ)"
-                ds_map[ds] = ds_map.get(ds, 0) + 1
-                st_map[sv] = st_map.get(sv, 0) + 1
-            st.markdown(f"**توزيع `design_status`:** {ds_map}")
-            st.markdown(f"**توزيع `status`:** {st_map}")
         else:
-            st.info("لا توجد طلبات — راجع الحل أعلاه.")
-    # ══════════════════════════════════════════════════════════════════════
+            st.info("📭 لا توجد طلبات في قاعدة البيانات بعد. أضف أوردراً من قسم المبيعات.")
+        return
 
-    # ══ FILTERING ══════════════════════════════════════════════════════════
+    # ── Filter: what needs design work ────────────────────────────────────
     DESIGN_COMPLETE = {"مكتمل", "تم التصميم", "designed", "complete", "completed"}
     ORDER_FINAL     = {"تم التسليم", "تم_التسليم", "delivered", "done"}
 
@@ -2163,25 +1765,27 @@ def pg_design():
         return ds not in DESIGN_COMPLETE and sv not in ORDER_FINAL
 
     pend = [r for r in rows if needs_design(r)]
-    done = [r for r in rows
-            if (r.get("design_status") or "").strip() in DESIGN_COMPLETE]
-    # ══════════════════════════════════════════════════════════════════════
+    done = [r for r in rows if (r.get("design_status") or "").strip() in DESIGN_COMPLETE]
+
+    # ── Status summary ────────────────────────────────────────────────────
+    st.markdown(
+        f'<div style="color:var(--t3);font-size:.74rem;margin-bottom:.6rem">'
+        f'إجمالي الطلبات: <b style="color:var(--gold)">{len(rows)}</b> | '
+        f'تحتاج تصميم: <b style="color:var(--gold)">{len(pend)}</b> | '
+        f'مكتملة: <b style="color:var(--grn)">{len(done)}</b>'
+        f'</div>', unsafe_allow_html=True)
 
     t1, t2 = st.tabs([
         f"⏳ تحتاج تصميم ({len(pend)})",
         f"✅ مكتملة ({len(done)})"
     ])
 
-    # ─────────────────────────────────────────────────────────────────────
+    # ─── TAB 1: Pending design ────────────────────────────────────────────
     with t1:
         if not pend:
             st.info("📭 لا توجد طلبات بانتظار التصميم.")
-            if not rows:
-                st.warning(
-                    "💡 لا توجد طلبات في قاعدة البيانات لهذا الـ Workspace.\n\n"
-                    "افتح لوحة التشخيص أعلاه لمعرفة السبب.")
         else:
-            # Status summary chips
+            # Status chips
             sc = {}
             for r in pend:
                 sc[r.get("status","—")] = sc.get(r.get("status","—"), 0) + 1
@@ -2193,105 +1797,115 @@ def pg_design():
             st.markdown(chips, unsafe_allow_html=True)
             st.markdown("")
 
-        for r in pend:
-            oid     = r.get("id", "")
-            onum    = r.get("order_number", "—")
-            cname   = r.get("customer_name", "—")
-            ostatus = r.get("status", "—")
-            ds      = (r.get("design_status") or "").strip()
-            icon    = "🆕" if not ds or ds == "قيد الانتظار" else "🔵"
+            for r in pend:
+                oid     = r.get("id", "")
+                onum    = r.get("order_number", "—")
+                cname   = r.get("customer_name", "—")
+                ostatus = r.get("status", "—")
+                ds      = (r.get("design_status") or "").strip()
+                icon    = "🆕" if not ds or ds == "قيد الانتظار" else "🔵"
 
-            with st.expander(
-                f"{icon}  {onum}  ←  {cname}    [الحالة: {ostatus}]",
-                expanded=False
-            ):
-                st.subheader(f"📋 تفاصيل الطلب  #{onum}")
-                c1, c2 = st.columns(2)
-                c1.markdown(f"**👤 العميل:**  {cname}")
-                c1.markdown(f"**📦 الكمية:**  {r.get('quantity', '—')}")
-                c1.markdown(f"**📐 القياس:**  {r.get('size', '—')}")
-                c1.markdown(f"**🏪 النشاط:** {r.get('paper_type', '—')}")
-                c2.markdown(f"**📅 التاريخ:** {str(r.get('created_at', '—'))[:16]}")
-                c2.markdown(f"**👨 أضافه:**  {r.get('created_by_name', '—')}")
-                c2.markdown(f"**📊 الحالة:**  {ostatus}")
-                c2.markdown(f"**📞 الهاتف:**  {r.get('customer_phone', '—')}")
-                if r.get("description"):
-                    st.info(f"📝 {r['description']}")
-                st.markdown("---")
-
-                upld = st.file_uploader(
-                    "⬆️ اختر ملف التصميم (PDF, PNG, AI, PSD, CDR…)",
-                    key=f"du_{oid}",
-                    type=["pdf","png","jpg","jpeg","ai","psd",
-                          "svg","eps","zip","cdr","webp"],
-                )
-                dl = st.text_input(
-                    "🔗 أو أدخل رابط التصميم",
-                    value=(r.get("design_link") or ""),
-                    key=f"dl_{oid}"
-                )
-                notes = st.text_area(
-                    "📝 ملاحظات للإنتاج",
-                    value=(r.get("design_notes") or ""),
-                    key=f"dn_{oid}",
-                    height=70,
-                )
-
-                if st.button(
-                    "✅ تأكيد رفع التصميم وإرساله للإنتاج",
-                    key=f"dok_{oid}",
-                    use_container_width=True
+                with st.expander(
+                    f"{icon}  {onum}  ←  {cname}    [{ostatus}]",
+                    expanded=False
                 ):
-                    file_url   = ""
-                    store_path = (r.get("design_storage_path") or "")
+                    st.subheader(f"📋 {onum}")
+                    c1, c2 = st.columns(2)
+                    c1.markdown(f"**👤 العميل:**  {cname}")
+                    c1.markdown(f"**📦 الكمية:**  {r.get('quantity', '—')}")
+                    c1.markdown(f"**📐 القياس:**  {r.get('size', '—')}")
+                    c1.markdown(f"**🏪 النشاط:** {r.get('paper_type', '—')}")
+                    c2.markdown(f"**📅 التاريخ:** {str(r.get('created_at', '—'))[:16]}")
+                    c2.markdown(f"**👨 أضافه:**  {r.get('created_by_name', '—')}")
+                    c2.markdown(f"**📊 الحالة:**  {ostatus}")
+                    c2.markdown(f"**📞 الهاتف:**  {r.get('customer_phone', '—')}")
+                    if r.get("description"):
+                        st.info(f"📝 {r['description']}")
 
-                    if upld:
-                        with st.spinner("⬆️ جاري رفع الملف إلى Supabase Storage…"):
-                            file_url, store_path = _upload(
-                                upld.read(), upld.name,
-                                upld.type or "application/octet-stream",
-                                subfolder="designs"
-                            )
-                        if not file_url:
-                            st.error("❌ فشل رفع الملف. تحقق من الاتصال.")
-                    else:
-                        file_url = (r.get("design_file_url") or "")
+                    # Show agent image if exists
+                    agent_img = r.get("mockup_url","")
+                    if agent_img and not r.get("mockup_status"):
+                        st.markdown("**📸 صورة الطلب (من المندوب):**")
+                        try:
+                            ir = requests.get(agent_img, timeout=10)
+                            if ir.status_code == 200:
+                                st.image(ir.content, use_container_width=True)
+                        except Exception:
+                            st.markdown(f'[🔗 فتح الصورة]({agent_img})')
 
-                    link = dl.strip() or (r.get("design_link") or "")
+                    st.markdown("---")
 
-                    if not file_url and not link:
-                        st.error("⚠️ يجب رفع ملف أو إدخال رابط التصميم.")
-                    else:
-                        ok = _patch("orders", {"id": oid}, {
-                            "design_status":       "مكتمل",
-                            "design_file_url":     file_url,
-                            "design_storage_path": store_path,
-                            "design_link":         link,
-                            "design_notes":        notes.strip(),
-                            "design_updated":      _ts(),
-                            "design_by":           st.session_state["uname"],
-                            "status":              "جاهز للطباعة",
-                        })
-                        if ok:
-                            _push_notification(
-                                WID,
-                                f"🎨 تصميم جاهز: {onum}",
-                                f"العميل: {cname} — يمكنكم البدء بالطباعة الآن",
-                                target_roles=["production", "admin"],
-                                order_id=oid
-                            )
-                            _get_cached.clear()
-                            st.success(
-                                f"✅ تم رفع التصميم بنجاح! "
-                                f"الطلب **{onum}** انتقل لقسم الإنتاج.")
-                            st.rerun()
+                    # ── File upload — uses ACTIVE_KEY via _upload() ───────
+                    upld = st.file_uploader(
+                        "⬆️ اختر ملف التصميم (PDF, PNG, AI, PSD, CDR…)",
+                        key=f"du_{oid}",
+                        type=["pdf","png","jpg","jpeg","ai","psd",
+                              "svg","eps","zip","cdr","webp"],
+                    )
+                    dl = st.text_input(
+                        "🔗 أو أدخل رابط التصميم",
+                        value=(r.get("design_link") or ""),
+                        key=f"dl_{oid}"
+                    )
+                    notes = st.text_area(
+                        "📝 ملاحظات للإنتاج",
+                        value=(r.get("design_notes") or ""),
+                        key=f"dn_{oid}",
+                        height=70,
+                    )
+
+                    if st.button(
+                        "✅ تأكيد رفع التصميم وإرساله للإنتاج",
+                        key=f"dok_{oid}",
+                        use_container_width=True
+                    ):
+                        file_url   = ""
+                        store_path = (r.get("design_storage_path") or "")
+
+                        if upld:
+                            with st.spinner("⬆️ جاري رفع الملف إلى Supabase Storage…"):
+                                # _upload uses ACTIVE_KEY (service key)
+                                file_url, store_path = _upload(
+                                    upld.read(), upld.name,
+                                    upld.type or "application/octet-stream",
+                                    subfolder="designs"
+                                )
+                            if not file_url:
+                                st.error("❌ فشل رفع الملف.")
                         else:
-                            st.error(
-                                "❌ فشل تحديث الطلب في Supabase. "
-                                "تأكد من تعطيل RLS: "
-                                "ALTER TABLE orders DISABLE ROW LEVEL SECURITY;")
+                            file_url = (r.get("design_file_url") or "")
 
-    # ─────────────────────────────────────────────────────────────────────
+                        link = dl.strip() or (r.get("design_link") or "")
+
+                        if not file_url and not link:
+                            st.error("⚠️ يجب رفع ملف أو إدخال رابط التصميم.")
+                        else:
+                            # _patch uses RH with ACTIVE_KEY
+                            ok = _patch("orders", {"id": oid}, {
+                                "design_status":       "مكتمل",
+                                "design_file_url":     file_url,
+                                "design_storage_path": store_path,
+                                "design_link":         link,
+                                "design_notes":        notes.strip(),
+                                "design_updated":      _ts(),
+                                "design_by":           st.session_state["uname"],
+                                "status":              "جاهز للطباعة",
+                            })
+                            if ok:
+                                _push_notification(
+                                    WID,
+                                    f"🎨 تصميم جاهز: {onum}",
+                                    f"العميل: {cname} — يمكنكم البدء بالطباعة الآن",
+                                    target_roles=["production", "admin"],
+                                    order_id=oid
+                                )
+                                _get_cached.clear()
+                                st.success(f"✅ تم رفع التصميم! الطلب **{onum}** انتقل لقسم الإنتاج.")
+                                st.rerun()
+                            else:
+                                st.error("❌ فشل تحديث الطلب في Supabase.")
+
+    # ─── TAB 2: Completed designs ─────────────────────────────────────────
     with t2:
         if not done:
             st.info("لا توجد تصاميم مكتملة بعد.")
@@ -2316,8 +1930,10 @@ def pg_design():
                         sp = (r.get("design_storage_path") or "")
                         if sp: _storage_delete(sp)
                         try:
-                            requests.delete(f"{REST}/orders", headers=RH,
-                                            params={"id": f"eq.{r['id']}"}, timeout=10)
+                            requests.delete(f"{REST}/orders",
+                                            headers=RH,
+                                            params={"id": f"eq.{r['id']}"},
+                                            timeout=10)
                         except Exception: pass
                         _get_cached.clear()
                         st.success("✅ تم الحذف.")
@@ -2332,9 +1948,9 @@ def pg_production():
     hdr("🖨️","قسم الإنتاج — Z-ORDER V2","نفّذ الأوردرات الجاهزة")
     guide("① الأوردر يظهر هنا فقط بعد رفع التصميم<br>"
           "② حمّل ملف التصميم واطبع<br>"
-          "③ 'إتمام الطباعة وحذف الملف' يُكمل الطلب ويحذف الملف فيزيائياً من Storage لتوفير المساحة")
+          "③ 'إتمام الطباعة وحذف الملف' يُكمل الطلب ويحذف الملف من Storage")
     WID   = wid()
-    rows  = _get("orders",{"workspace_id":WID},order="id.desc")
+    rows  = _get_direct("orders", {"workspace_id": WID}, order="id.desc") or []
     ready  = [r for r in rows if r.get("design_status")=="مكتمل" and r.get("production_status")=="قيد الانتظار"]
     prting = [r for r in rows if r.get("production_status")=="جاري الإنتاج"]
     done   = [r for r in rows if r.get("production_status")=="مكتمل"]
@@ -2342,22 +1958,20 @@ def pg_production():
     t1,t2,t3 = st.tabs([f"🟢 جاهز ({len(ready)})",f"🟠 جاري ({len(prting)})",f"✅ مكتمل ({len(done)})"])
 
     def _complete_and_delete(order_row, pn=""):
-        """Mark order as done AND delete design file from Storage."""
         _patch("orders",{"id":order_row["id"]},{
             "production_status":"مكتمل",
             "production_notes":pn,
             "production_updated":_ts(),
             "production_by":st.session_state["uname"],
             "status":"جاهز للتسليم",
-            "design_file_url":"",          # clear URL from record
-            "design_storage_path":"",      # clear path from record
+            "design_file_url":"",
+            "design_storage_path":"",
         })
-        # Delete file physically from Storage
         sp = order_row.get("design_storage_path","")
         if sp:
             deleted = _storage_delete(sp)
             if deleted:
-                st.success("🗑️ ملف التصميم حُذف من Storage — تم توفير المساحة.")
+                st.success("🗑️ ملف التصميم حُذف من Storage.")
         _push_notification(WID,
                            f"جاهز للتسليم: {order_row.get('order_number','')}",
                            f"العميل: {order_row.get('customer_name','')}",
@@ -2374,13 +1988,9 @@ def pg_production():
                 c1.markdown(f"**الكمية:** {r.get('quantity','')}")
                 c2.markdown(f"**ملاحظات التصميم:** {r.get('design_notes','—')}")
                 c2.markdown(f"**صمّمه:** {r.get('design_by','—')}")
-
-                # زر تحميل الملف
                 fu = r.get("design_file_url","") or r.get("design_link","")
                 if fu: _dl_btn(fu,"⬇️ تحميل ملف التصميم للطباعة")
-
                 pn = st.text_area("📝 ملاحظات الإنتاج", key=f"pn_{r['id']}", height=55)
-
                 col1, col2, col3 = st.columns(3)
                 if col1.button("▶️ بدء الطباعة", key=f"st_{r['id']}"):
                     _patch("orders",{"id":r["id"]},{
@@ -2391,20 +2001,15 @@ def pg_production():
                                        f"العميل: {r.get('customer_name','')}",
                                        target_roles=["admin","sales"],order_id=r["id"])
                     _get_cached.clear(); st.success("▶️ بدأ الإنتاج!"); st.rerun()
-
                 if col2.button("✅ إتمام مباشر", key=f"fi_{r['id']}"):
                     _complete_and_delete(r, pn)
                     st.success("✅ اكتمل — إشعار أُرسل!"); st.rerun()
-
-                # زر أحمر: إتمام الطباعة وحذف الملف فيزيائياً
                 st.markdown(
                     '<style>.del-btn button{background:linear-gradient(135deg,#ef4444,#b91c1c)'
-                    '!important;}</style><div class="del-btn">',
-                    unsafe_allow_html=True)
-                if col3.button("🗑️ إتمام وحذف الملف", key=f"delprt_{r['id']}",
-                               help="يُكمل الطلب ويحذف ملف التصميم نهائياً من Storage"):
+                    '!important;}</style><div class="del-btn">', unsafe_allow_html=True)
+                if col3.button("🗑️ إتمام وحذف الملف", key=f"delprt_{r['id']}"):
                     _complete_and_delete(r, pn)
-                    st.success("✅ مكتمل — الملف حُذف من Storage لتوفير المساحة!"); st.rerun()
+                    st.success("✅ مكتمل — الملف حُذف!"); st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
 
     with t2:
@@ -2414,7 +2019,6 @@ def pg_production():
                 st.markdown(f"**النشاط:** {r.get('paper_type','')} · {r.get('size','')} | **الكمية:** {r.get('quantity','')}")
                 fu = r.get("design_file_url","") or r.get("design_link","")
                 if fu: _dl_btn(fu,"⬇️ تحميل")
-
                 col1, col2 = st.columns(2)
                 if col1.button("✅ تحديد كمكتمل", key=f"fn_{r['id']}"):
                     _patch("orders",{"id":r["id"]},{
@@ -2424,15 +2028,12 @@ def pg_production():
                                        f"العميل: {r.get('customer_name','')}",
                                        target_roles=["admin","sales","agent"],order_id=r["id"])
                     _get_cached.clear(); st.success("✅ مكتمل!"); st.rerun()
-
                 st.markdown(
                     '<style>.del-btn2 button{background:linear-gradient(135deg,#ef4444,#b91c1c)'
-                    '!important;}</style><div class="del-btn2">',
-                    unsafe_allow_html=True)
-                if col2.button("🗑️ إتمام وحذف الملف", key=f"delprt2_{r['id']}",
-                               help="يُكمل الطلب ويحذف ملف التصميم نهائياً من Storage"):
+                    '!important;}</style><div class="del-btn2">', unsafe_allow_html=True)
+                if col2.button("🗑️ إتمام وحذف الملف", key=f"delprt2_{r['id']}"):
                     _complete_and_delete(r)
-                    st.success("✅ مكتمل — الملف حُذف من Storage!"); st.rerun()
+                    st.success("✅ مكتمل — الملف حُذف!"); st.rerun()
                 st.markdown('</div>', unsafe_allow_html=True)
 
     with t3:
@@ -2442,21 +2043,22 @@ def pg_production():
             st.markdown(
                 f'<div class="card"><b>{r.get("order_number","")}</b> — {r.get("customer_name","")}'
                 f'&nbsp;{bdg(r.get("status","مكتمل"))}'
-                f'&nbsp;{"🗑️ <small style=\"color:var(--t3)\">ملف محذوف</small>" if file_deleted else ""}'
+                f'{"&nbsp;🗑️ <small style=\'color:var(--t3)\'>ملف محذوف</small>" if file_deleted else ""}'
                 f'<br><small style="color:var(--t3)">اكتمل: {str(r.get("production_updated","—"))[:16]}'
                 f' | {r.get("production_by","—")}</small></div>',
                 unsafe_allow_html=True)
 
+
 # ══════════════════════════════════════════════════════════════════════════════
-#  SHARED PAGES (Purchase · Agent · Chat · Incidents · Financial)
+#  SHARED PAGES
 # ══════════════════════════════════════════════════════════════════════════════
 
 def pg_purchase_submit():
     hdr("📦","طلب شراء","اطلب مواد من قسم المشتريات")
     with st.form("pur", clear_on_submit=True):
         c1,c2 = st.columns(2)
-        item  = c1.text_input("اسم الصنف *",  placeholder="حبر أسود، ورق A3...")
-        qty   = c2.text_input("الكمية *",      placeholder="5 علب...")
+        item  = c1.text_input("اسم الصنف *", placeholder="حبر أسود، ورق A3...")
+        qty   = c2.text_input("الكمية *",     placeholder="5 علب...")
         urg   = st.selectbox("الأولوية", ["عادي","عاجل","طارئ"])
         notes = st.text_area("ملاحظات", height=65)
         sub   = st.form_submit_button("📤 إرسال", use_container_width=True)
@@ -2469,19 +2071,22 @@ def pg_purchase_submit():
                 "requester_name":st.session_state["uname"],"department":ROLES[role]["ar"],
                 "item_name":item.strip(),"quantity":qty.strip(),
                 "urgency":urg,"notes":notes.strip(),"status":"قيد المراجعة"})
-            if res:
+            if res and isinstance(res, dict) and "id" in res:
                 _push_notification(wid(),f"طلب شراء جديد: {item.strip()}",
                                    f"من {st.session_state['uname']} | {urg}",
                                    target_roles=["purchase","admin"])
                 st.success("✅ تم إرسال طلب الشراء!")
     st.markdown("---")
-    rows = _get("purchase_requests",{"workspace_id":wid(),"requester_id":st.session_state["uid"]},
+    rows = _get("purchase_requests",
+                {"workspace_id":wid(),"requester_id":st.session_state["uid"]},
                 order="id.desc",limit=10)
     if rows:
-        df = pd.DataFrame(rows)[["item_name","quantity","urgency","status","created_at"]]
-        st.dataframe(df.rename(columns={"item_name":"الصنف","quantity":"الكمية",
-                                        "urgency":"الأولوية","status":"الحالة","created_at":"التاريخ"}),
-                     use_container_width=True, hide_index=True)
+        df = pd.DataFrame(rows)
+        cols = [c for c in ["item_name","quantity","urgency","status","created_at"] if c in df.columns]
+        st.dataframe(df[cols].rename(columns={
+            "item_name":"الصنف","quantity":"الكمية","urgency":"الأولوية",
+            "status":"الحالة","created_at":"التاريخ"}),
+            use_container_width=True, hide_index=True)
     else: st.info("لم تقدم أي طلب بعد.")
 
 
@@ -2516,12 +2121,13 @@ def pg_purchase_manage():
     with t2:
         if not rest: st.info("لا يوجد سجل.")
         else:
-            df = pd.DataFrame(rest)[["requester_name","department","item_name",
-                                     "quantity","urgency","status","reviewed_by","created_at"]]
-            st.dataframe(df.rename(columns={"requester_name":"الموظف","department":"القسم",
-                                            "item_name":"الصنف","quantity":"الكمية","urgency":"الأولوية",
-                                            "status":"الحالة","reviewed_by":"راجعه","created_at":"التاريخ"}),
-                         use_container_width=True, hide_index=True)
+            df = pd.DataFrame(rest)
+            cols = [c for c in ["requester_name","department","item_name","quantity","urgency","status","reviewed_by","created_at"] if c in df.columns]
+            st.dataframe(df[cols].rename(columns={
+                "requester_name":"الموظف","department":"القسم","item_name":"الصنف",
+                "quantity":"الكمية","urgency":"الأولوية","status":"الحالة",
+                "reviewed_by":"راجعه","created_at":"التاريخ"}),
+                use_container_width=True, hide_index=True)
 
 
 def pg_agent_new():
@@ -2532,8 +2138,7 @@ def pg_agent_new():
         vs    = st.selectbox("📊 حالة العميل", ["محتمل","اشترى","لن يشتري"])
         notes = st.text_area("📝 ملاحظات", height=65)
         img   = st.file_uploader("📸 صورة المحل أو الوصل",
-                                  type=["jpg","jpeg","png","webp"],
-                                  help="يُرفع إلى Supabase Storage")
+                                  type=["jpg","jpeg","png","webp"])
         sub   = st.form_submit_button("✅ حفظ الزيارة", use_container_width=True)
     if sub:
         if not cust.strip(): st.error("يرجى إدخال اسم العميل.")
@@ -2541,15 +2146,14 @@ def pg_agent_new():
             img_url = ""
             if img:
                 with st.spinner("رفع الصورة..."):
-                    img_url, _ = _upload(img.read(),
-                                         img.name,
-                                         img.type or "image/jpeg",
-                                         subfolder="agents")
+                    img_url, _ = _upload(img.read(), img.name,
+                                         img.type or "image/jpeg", subfolder="agents")
             res = _post("agent_visits",{
                 "workspace_id":wid(),"agent_id":st.session_state["uid"],
                 "agent_name":st.session_state["uname"],"customer_name":cust.strip(),
                 "location":loc.strip(),"visit_status":vs,"notes":notes.strip(),"image_path":img_url})
-            if res: st.success(f"✅ تم تسجيل زيارة **{cust.strip()}**!")
+            if res and isinstance(res, dict) and "id" in res:
+                st.success(f"✅ تم تسجيل زيارة **{cust.strip()}**!")
 
 
 def pg_agent_my():
@@ -2599,19 +2203,15 @@ def pg_agent_reports():
 def pg_chat():
     hdr("💬","محادثة الفريق — Z-ORDER V2","معزولة لشركتك · يدعم @تاغ الأقسام")
     guide("① اكتب @المبيعات أو @التصميم أو @الإنتاج لإرسال إشعار للقسم المعني<br>"
-          "② الأصوات والإشعارات تعمل على المتصفح وتطبيق PWA<br>"
-          "③ المحادثة معزولة — لا يراها موظفو شركات أخرى")
+          "② المحادثة معزولة — لا يراها موظفو شركات أخرى")
     WID = wid(); uid = st.session_state["uid"]
 
-    # ── إشعار صوتي للرسائل الجديدة (يُشغَّل عبر JS bridge) ──────────────────
-    st.markdown(
-        '<script>if(window.zPlayBeep) window.zPlayBeep(660,120);</script>',
-        unsafe_allow_html=True)
+    st.markdown('<script>if(window.zPlayBeep) window.zPlayBeep(660,120);</script>',
+                unsafe_allow_html=True)
 
     with st.form("cf", clear_on_submit=True):
-        msg  = st.text_input(
-            "✍️ اكتب رسالتك...",
-            placeholder="مثال: @التصميم ملف الكارت جاهز للمراجعة")
+        msg  = st.text_input("✍️ اكتب رسالتك...",
+                             placeholder="مثال: @التصميم ملف الكارت جاهز للمراجعة")
         sent = st.form_submit_button("إرسال ←", use_container_width=True)
 
     if sent and msg.strip():
@@ -2619,34 +2219,24 @@ def pg_chat():
                                "sender_name":st.session_state["uname"],
                                "sender_role":st.session_state["role"],
                                "message":msg.strip()})
-
-        # ── @mention detection → push notification to tagged role ──────────
         MENTION_MAP = {
-            "@المبيعات":  "sales",    "@sales":    "sales",
-            "@التصميم":   "design",   "@design":   "design",
-            "@الإنتاج":   "production","@production":"production",
-            "@المشتريات": "purchase", "@purchase": "purchase",
-            "@المندوب":   "agent",    "@agent":    "agent",
-            "@المدير":    "admin",    "@admin":    "admin",
+            "@المبيعات":"sales","@sales":"sales",
+            "@التصميم":"design","@design":"design",
+            "@الإنتاج":"production","@production":"production",
+            "@المشتريات":"purchase","@purchase":"purchase",
+            "@المندوب":"agent","@agent":"agent",
+            "@المدير":"admin","@admin":"admin",
         }
         tagged_roles = []
         for tag, role in MENTION_MAP.items():
-            if tag in msg:
-                tagged_roles.append(role)
+            if tag in msg: tagged_roles.append(role)
         if tagged_roles:
-            _push_notification(
-                WID,
-                f"📢 تاغ من {st.session_state['uname']}",
-                msg.strip()[:100],
-                target_roles=tagged_roles,
-            )
-            # trigger browser notification via JS
+            _push_notification(WID, f"📢 تاغ من {st.session_state['uname']}",
+                               msg.strip()[:100], target_roles=tagged_roles)
             st.markdown(
                 f'<script>if(window.zCheckMention) '
-                f'window.zCheckMention({repr(msg.strip())}, '
-                f'{repr(st.session_state["role"])});</script>',
+                f'window.zCheckMention({repr(msg.strip())},{repr(st.session_state["role"])});</script>',
                 unsafe_allow_html=True)
-
         _get_cached.clear(); st.rerun()
 
     msgs = _get("chat_messages",{"workspace_id":WID},order="id.desc",limit=60)
@@ -2681,17 +2271,19 @@ def pg_incident_submit():
                 "workspace_id":wid(),"reporter_id":st.session_state["uid"],
                 "reporter_name":st.session_state["uname"],"department":ROLES[role]["ar"],
                 "description":desc.strip(),"severity":sev,"status":"مفتوح"})
-            if res:
+            if res and isinstance(res, dict) and "id" in res:
                 _push_notification(wid(),f"بلاغ {sev}: من {ROLES[role]['ar']}",
                                    desc.strip()[:80],target_roles=["admin"])
                 st.success("✅ تم إرسال البلاغ للمدير!")
-    rows = _get("incident_reports",{"workspace_id":wid(),"reporter_id":st.session_state["uid"]},
+    rows = _get("incident_reports",
+                {"workspace_id":wid(),"reporter_id":st.session_state["uid"]},
                 order="id.desc",limit=8)
     if rows:
-        df = pd.DataFrame(rows)[["description","severity","status","created_at"]]
-        st.dataframe(df.rename(columns={"description":"الوصف","severity":"الخطورة",
-                                        "status":"الحالة","created_at":"التاريخ"}),
-                     use_container_width=True, hide_index=True)
+        df = pd.DataFrame(rows)
+        cols = [c for c in ["description","severity","status","created_at"] if c in df.columns]
+        st.dataframe(df[cols].rename(columns={
+            "description":"الوصف","severity":"الخطورة","status":"الحالة","created_at":"التاريخ"}),
+            use_container_width=True, hide_index=True)
 
 
 def pg_all_incidents():
@@ -2706,7 +2298,7 @@ def pg_all_incidents():
             if not lst: st.info("لا توجد."); continue
             for r in lst:
                 sc,sl = SEV_MAP.get(r.get("severity","متوسط"),("b-sev-md","🟡"))
-                with st.expander(f'{sl} {r.get("severity","")}  —  {r.get("department","")}  —  {str(r.get("created_at",""))[:16]}'):
+                with st.expander(f'{sl} {r.get("severity","")} — {r.get("department","")} — {str(r.get("created_at",""))[:16]}'):
                     st.markdown(f"**المبلّغ:** {r.get('reporter_name','')}<br>**الوصف:** {r.get('description','')}",
                                 unsafe_allow_html=True)
                     if r.get("status")=="مفتوح":
@@ -2719,13 +2311,13 @@ def pg_all_incidents():
 
 def pg_financial():
     hdr("💰","التقارير المالية","للمبيعات ومدير الشركة فقط")
-    WID   = wid()
-    rows  = _get("orders",{"workspace_id":WID},order="id.desc")
-    tv    = sum(float(o.get("total_price",0) or 0) for o in rows)
-    paid  = sum(float(o.get("paid",0)        or 0) for o in rows)
-    rem   = sum(float(o.get("remaining",0)   or 0) for o in rows)
-    cnt   = len(rows)
-    avg   = tv/cnt if cnt else 0
+    WID  = wid()
+    rows = _get("orders",{"workspace_id":WID},order="id.desc")
+    tv   = sum(float(o.get("total_price",0) or 0) for o in rows)
+    paid = sum(float(o.get("paid",0)        or 0) for o in rows)
+    rem  = sum(float(o.get("remaining",0)   or 0) for o in rows)
+    cnt  = len(rows)
+    avg  = tv/cnt if cnt else 0
     c1,c2,c3,c4 = st.columns(4)
     c1.metric("إجمالي القيمة (د.ع)",  f"{tv:,.0f}")
     c2.metric("إجمالي المدفوع (د.ع)", f"{paid:,.0f}")
@@ -2733,61 +2325,62 @@ def pg_financial():
     c4.metric("متوسط الأوردر (د.ع)",  f"{avg:,.0f}")
     st.markdown("---")
     if not rows: st.info("لا توجد أوردرات."); return
-    df = pd.DataFrame(rows)[["order_number","customer_name","paper_type","size",
-                              "quantity","total_price","paid","remaining","status","delivery_date","created_at"]]
-    st.dataframe(df.rename(columns={
+    df = pd.DataFrame(rows)
+    cols = [c for c in ["order_number","customer_name","paper_type","size","quantity",
+                         "total_price","paid","remaining","status","delivery_date","created_at"]
+            if c in df.columns]
+    st.dataframe(df[cols].rename(columns={
         "order_number":"الأوردر","customer_name":"العميل","paper_type":"الورق","size":"القياس",
         "quantity":"الكمية","total_price":"السعر الكلي","paid":"المدفوع","remaining":"المتبقي",
-        "status":"الحالة","delivery_date":"التسليم","created_at":"التاريخ"
-    }), use_container_width=True, hide_index=True)
+        "status":"الحالة","delivery_date":"التسليم","created_at":"التاريخ"}),
+        use_container_width=True, hide_index=True)
     ws_name = st.session_state.get("workspace_name","")
     header  = (f"Z-ORDER — تقرير مالي\nWorkspace: {ws_name}\n"
                f"Developed by: {DEVELOPER}\nتاريخ: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n")
     st.download_button("⬇️ تصدير CSV",
-        (header+df.to_csv(index=False)).encode("utf-8-sig"),
+        (header+df[cols].to_csv(index=False)).encode("utf-8-sig"),
         file_name=f"zorder_financial_{datetime.date.today()}.csv",
         mime="text/csv", use_container_width=True)
 
 
 def pg_generic_dash(role):
     hdr("📊","لوحتي","نظرة عامة")
-    WID   = wid()
-    rows  = _get("orders",{"workspace_id":WID})
-    tot   = len(rows)
-    nw    = sum(1 for o in rows if o.get("status")=="جديد")
-    ip    = sum(1 for o in rows if o.get("production_status")=="جاري الإنتاج")
-    dn    = sum(1 for o in rows if o.get("status")=="تم التسليم")
+    WID  = wid()
+    rows = _get_direct("orders", {"workspace_id": WID}) or []
+    tot  = len(rows)
+    nw   = sum(1 for o in rows if o.get("status")=="جديد")
+    ip   = sum(1 for o in rows if o.get("production_status")=="جاري الإنتاج")
+    dn   = sum(1 for o in rows if o.get("status")=="تم التسليم")
     c1,c2,c3,c4 = st.columns(4)
     c1.metric("إجمالي",tot); c2.metric("جديدة",nw); c3.metric("جاري",ip); c4.metric("مُسلَّمة",dn)
     st.markdown("---")
     recent = sorted(rows,key=lambda x:x.get("id",0),reverse=True)[:10]
     if recent:
-        df = pd.DataFrame(recent)[["order_number","customer_name","paper_type","size","quantity","status","created_at"]]
-        st.dataframe(df.rename(columns={"order_number":"الأوردر","customer_name":"العميل",
-                                        "paper_type":"الورق","size":"القياس","quantity":"الكمية",
-                                        "status":"الحالة","created_at":"التاريخ"}),
-                     use_container_width=True, hide_index=True)
+        df = pd.DataFrame(recent)
+        cols = [c for c in ["order_number","customer_name","paper_type","size","quantity","status","created_at"] if c in df.columns]
+        st.dataframe(df[cols].rename(columns={
+            "order_number":"الأوردر","customer_name":"العميل","paper_type":"الورق",
+            "size":"القياس","quantity":"الكمية","status":"الحالة","created_at":"التاريخ"}),
+            use_container_width=True, hide_index=True)
+
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  DESIGN: MOCKUP UPLOAD — visible to sales only for approval
+#  DESIGN: MOCKUP UPLOAD
 # ══════════════════════════════════════════════════════════════════════════════
 
 def pg_design_mockup():
-    hdr("🖼️","رفع Mockup للمراجعة","ارفع صورة Mockup للتصميم — تظهر لقسم المبيعات فقط للاعتماد")
+    hdr("🖼️","رفع Mockup للمراجعة","ارفع صورة Mockup — تظهر لقسم المبيعات للاعتماد")
     guide("① ارفع صورة Mockup لكل أوردر (PNG/JPG/WEBP)<br>"
           "② الصورة تُخزَّن في Supabase Storage وتظهر للمبيعات فقط<br>"
           "③ المبيعات تعتمد أو ترفض من «التصاميم»")
     WID  = wid()
-    rows = _get("orders", {"workspace_id": WID}, order="id.desc")
-    # Show orders that have no mockup yet or already have one
+    rows = _get_direct("orders", {"workspace_id": WID}, order="id.desc") or []
     for r in rows:
         with st.expander(f"🖼️ {r.get('order_number','')} — {r.get('customer_name','')} "
                          f"{'✅ Mockup موجود' if r.get('mockup_url') else ''}"):
             c1, c2 = st.columns(2)
             c1.markdown(f"**الكمية:** {r.get('quantity','')}")
             c1.markdown(f"**الحالة:** {r.get('status','')}")
-
-            # Show existing mockup
             existing = r.get("mockup_url","")
             if existing:
                 try:
@@ -2796,73 +2389,47 @@ def pg_design_mockup():
                         c2.image(rr.content, caption="Mockup الحالي", use_container_width=True)
                 except Exception:
                     c2.markdown(f'[🔗 فتح Mockup]({existing})')
-
             st.markdown("---")
-            mock_file = st.file_uploader(
-                "📸 ارفع صورة Mockup",
-                key=f"mock_{r['id']}",
-                type=["png","jpg","jpeg","webp"],
-                help="صورة المنتج النهائي للمراجعة"
-            )
+            mock_file = st.file_uploader("📸 ارفع صورة Mockup",
+                                         key=f"mock_{r['id']}",
+                                         type=["png","jpg","jpeg","webp"])
             if st.button("⬆️ رفع Mockup للمراجعة", key=f"mock_up_{r['id']}"):
                 if not mock_file:
                     st.error("يرجى اختيار صورة أولاً.")
                 else:
                     with st.spinner("جاري رفع Mockup..."):
                         mock_url, mock_path = _upload(
-                            mock_file.read(),
-                            mock_file.name,
-                            mock_file.type or "image/png",
-                            subfolder="mockups",
-                        )
+                            mock_file.read(), mock_file.name,
+                            mock_file.type or "image/png", subfolder="mockups")
                     if mock_url:
                         _patch("orders", {"id": r["id"]}, {
-                            "mockup_url":  mock_url,
-                            "mockup_path": mock_path,
+                            "mockup_url":    mock_url,
+                            "mockup_path":   mock_path,
                             "mockup_status": "قيد المراجعة",
                         })
-                        _push_notification(
-                            WID,
+                        _push_notification(WID,
                             f"Mockup جديد للمراجعة: {r.get('order_number','')}",
                             f"العميل: {r.get('customer_name','')} — يرجى المراجعة والاعتماد",
-                            target_roles=["sales", "admin"],
-                            order_id=r["id"],
-                        )
+                            target_roles=["sales","admin"], order_id=r["id"])
                         _get_cached.clear()
-                        st.success("✅ تم رفع Mockup! إشعار أُرسل لقسم المبيعات للمراجعة.")
-                        st.rerun()
+                        st.success("✅ تم رفع Mockup! إشعار أُرسل لقسم المبيعات."); st.rerun()
                     else:
-                        st.error("❌ فشل الرفع. تحقق من الاتصال بـ Supabase Storage.")
+                        st.error("❌ فشل الرفع.")
 
 
-# ── Update sales preview to show mockup approval ─────────────────────────────
 def pg_sales_preview_v2():
     hdr("🖼️","التصاميم والـ Mockup","راجع واعتمد ملفات التصميم والـ Mockup")
     WID  = wid()
     rows = _get("orders", {"workspace_id": WID}, order="id.desc")
-
     t1, t2 = st.tabs(["🖼️ Mockup للاعتماد", "📁 ملفات التصميم"])
-
     with t1:
         mock_rows = [r for r in rows if r.get("mockup_url")]
-        if not mock_rows:
-            st.info("لا توجد Mockups للمراجعة بعد.")
+        if not mock_rows: st.info("لا توجد Mockups للمراجعة بعد.")
         for r in mock_rows:
-            status_color = {
-                "قيد المراجعة": "var(--gold)",
-                "معتمد":        "var(--grn)",
-                "مرفوض":        "var(--red)",
-            }.get(r.get("mockup_status",""), "var(--t2)")
-            with st.expander(
-                f"🖼️ {r.get('order_number','')} — {r.get('customer_name','')} "
-                f"[{r.get('mockup_status','—')}]"
-            ):
-                st.markdown(
-                    f"<span style='color:{status_color};font-weight:700'>"
-                    f"{r.get('mockup_status','—')}</span>",
-                    unsafe_allow_html=True)
-
-                # Show mockup image
+            status_color = {"قيد المراجعة":"var(--gold)","معتمد":"var(--grn)","مرفوض":"var(--red)"}.get(r.get("mockup_status",""),"var(--t2)")
+            with st.expander(f"🖼️ {r.get('order_number','')} — {r.get('customer_name','')} [{r.get('mockup_status','—')}]"):
+                st.markdown(f"<span style='color:{status_color};font-weight:700'>{r.get('mockup_status','—')}</span>",
+                            unsafe_allow_html=True)
                 mu = r.get("mockup_url","")
                 if mu:
                     try:
@@ -2871,26 +2438,23 @@ def pg_sales_preview_v2():
                             st.image(rr.content, use_container_width=True)
                     except Exception:
                         st.markdown(f'[🔗 فتح Mockup]({mu})')
-
                 st.markdown("---")
                 col1, col2 = st.columns(2)
                 if col1.button("✅ اعتماد Mockup", key=f"mock_appr_{r['id']}"):
-                    _patch("orders", {"id": r["id"]}, {"mockup_status": "معتمد"})
+                    _patch("orders",{"id":r["id"]},{"mockup_status":"معتمد"})
                     _push_notification(WID, f"✅ Mockup معتمد: {r.get('order_number','')}",
-                                       f"المبيعات اعتمدت التصميم",
+                                       "المبيعات اعتمدت التصميم",
                                        target_roles=["design"], order_id=r["id"])
                     _get_cached.clear(); st.success("✅ تم اعتماد Mockup!"); st.rerun()
                 if col2.button("❌ رفض Mockup", key=f"mock_rej_{r['id']}"):
-                    _patch("orders", {"id": r["id"]}, {"mockup_status": "مرفوض"})
+                    _patch("orders",{"id":r["id"]},{"mockup_status":"مرفوض"})
                     _push_notification(WID, f"❌ Mockup مرفوض: {r.get('order_number','')}",
-                                       f"يرجى التعديل وإعادة الرفع",
+                                       "يرجى التعديل وإعادة الرفع",
                                        target_roles=["design"], order_id=r["id"])
                     _get_cached.clear(); st.warning("تم الرفض — إشعار أُرسل للمصمم."); st.rerun()
-
     with t2:
         design_rows = [r for r in rows if r.get("design_status") == "مكتمل"]
-        if not design_rows:
-            st.info("لا توجد ملفات تصميم مكتملة بعد.")
+        if not design_rows: st.info("لا توجد ملفات تصميم مكتملة بعد.")
         for r in design_rows:
             with st.expander(f"🎨 {r.get('order_number','')} — {r.get('customer_name','')}"):
                 c1, c2 = st.columns(2)
@@ -2911,7 +2475,7 @@ def pg_sales_preview_v2():
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  AGENT: FIELD ORDER — مندوب يرفع أوردر من الميدان
+#  AGENT: FIELD ORDER
 # ══════════════════════════════════════════════════════════════════════════════
 
 def pg_agent_order():
@@ -2919,28 +2483,21 @@ def pg_agent_order():
     guide("① أدخل تفاصيل الطلب كما يطلبها العميل في الميدان<br>"
           "② الأوردر يصل فوراً للوحة التحكم وقسم التصميم<br>"
           "③ يمكنك إرفاق صورة للطلب المكتوب أو العينة")
-
     with st.form("agent_order_form", clear_on_submit=True):
         st.markdown('<div class="sec">👤 بيانات العميل</div>', unsafe_allow_html=True)
         cust  = st.text_input("اسم العميل / المحل *", placeholder="مثال: محل أحمد للملابس")
         phone = st.text_input("رقم الهاتف",           placeholder="مثال: 07901234567")
         loc   = st.text_input("📍 الموقع / العنوان",  placeholder="مثال: شارع الكندي، بغداد")
-
         st.markdown('<div class="sec">🖨️ تفاصيل الطلب</div>', unsafe_allow_html=True)
-        qty_txt  = st.text_input("الكمية *",      placeholder="مثال: 500 كارت، 2 بنر")
-        size_txt = st.text_input("القياس",         placeholder="مثال: A4، 80×60 سم")
-        biz      = st.text_input("النشاط التجاري", placeholder="مثال: محل ملابس، مطعم")
-        desc     = st.text_area("التفاصيل",        placeholder="ألوان، ملاحظات، نوع الورق...", height=80)
-
+        qty_txt  = st.text_input("الكمية *",       placeholder="مثال: 500 كارت، 2 بنر")
+        size_txt = st.text_input("القياس",          placeholder="مثال: A4، 80×60 سم")
+        biz      = st.text_input("النشاط التجاري",  placeholder="مثال: محل ملابس، مطعم")
+        desc     = st.text_area("التفاصيل",         placeholder="ألوان، ملاحظات، نوع الورق...", height=80)
         st.markdown('<div class="sec">💰 السعر (إن وُجد)</div>', unsafe_allow_html=True)
         price_txt = st.text_input("السعر الكلي (د.ع)", placeholder="مثال: 35,000 د.ع")
-
-        # صورة الطلب المكتوب أو العينة
         st.markdown('<div class="sec">📸 صورة الطلب (اختياري)</div>', unsafe_allow_html=True)
         order_img = st.file_uploader("ارفع صورة الطلب أو العينة",
-                                     type=["jpg","jpeg","png","webp"],
-                                     help="صورة الطلب المكتوب أو عينة العميل")
-
+                                     type=["jpg","jpeg","png","webp"])
         sub = st.form_submit_button("✅ إرسال الأوردر للمكتب", use_container_width=True)
 
     if sub:
@@ -2950,13 +2507,9 @@ def pg_agent_order():
             img_url = ""
             if order_img:
                 with st.spinner("رفع صورة الطلب..."):
-                    img_url, _ = _upload(
-                        order_img.read(),
-                        order_img.name,
-                        order_img.type or "image/jpeg",
-                        subfolder="agent_orders",
-                    )
-
+                    img_url, _ = _upload(order_img.read(), order_img.name,
+                                         order_img.type or "image/jpeg",
+                                         subfolder="agent_orders")
             ono = _order_no()
             res = _post("orders", {
                 "workspace_id":    wid(),
@@ -2968,7 +2521,7 @@ def pg_agent_order():
                 "paper_type":      biz.strip(),
                 "description":     (desc.strip() +
                                     (f"\n📍 الموقع: {loc.strip()}" if loc.strip() else "") +
-                                    (f"\n👤 أضافه المندوب: {st.session_state['uname']}" ) ),
+                                    f"\n👤 أضافه المندوب: {st.session_state['uname']}"),
                 "total_price":     price_txt.strip(),
                 "paid":            "",
                 "remaining":       "",
@@ -2979,21 +2532,15 @@ def pg_agent_order():
                 "design_status":   "قيد الانتظار",
                 "production_status":"قيد الانتظار",
                 "delivered":       False,
-                # Store agent image in mockup_url field for visibility
                 "mockup_url":      img_url,
             })
-
             if res and isinstance(res, dict) and "id" in res:
-                _push_notification(
-                    wid(),
+                _push_notification(wid(),
                     f"📍 أوردر ميداني جديد: {ono}",
                     f"المندوب {st.session_state['uname']} | العميل: {cust.strip()} | {qty_txt.strip()}",
-                    target_roles=["admin", "sales", "design"],
-                    order_id=res["id"],
-                )
-                st.success(
-                    f"✅ تم إرسال الأوردر **{ono}** للمكتب!\n\n"
-                    f"العميل: {cust.strip()} | الكمية: {qty_txt.strip()}")
+                    target_roles=["admin","sales","design"],
+                    order_id=res["id"])
+                st.success(f"✅ تم إرسال الأوردر **{ono}** للمكتب!\n\nالعميل: {cust.strip()} | الكمية: {qty_txt.strip()}")
             else:
                 st.error(f"❌ فشل الإرسال: {_post_err(res) if res else 'لا استجابة من Supabase'}")
 
@@ -3003,7 +2550,6 @@ def pg_agent_order():
 # ══════════════════════════════════════════════════════════════════════════════
 
 def main():
-    # 1. Auth gate — nothing renders until logged in
     if not auth_screen():
         footer(); return
 
@@ -3012,9 +2558,7 @@ def main():
 
     st.markdown('<div class="pw">', unsafe_allow_html=True)
 
-    # ══════════════════════════════════════════════════════════════
-    #  SUPER-ADMIN — platform owner only
-    # ══════════════════════════════════════════════════════════════
+    # ── SUPER-ADMIN ────────────────────────────────────────────────────────
     if role == "superadmin":
         if   active == "📊 لوحة التحكم":  pg_sa_dash()
         elif active == "🏢 الشركات":       pg_sa_companies()
@@ -3022,9 +2566,7 @@ def main():
         elif active == "📈 الإحصائيات":    pg_sa_stats()
         else: st.warning(f"الصفحة «{active}» غير متاحة.")
 
-    # ══════════════════════════════════════════════════════════════
-    #  ADMIN — workspace manager
-    # ══════════════════════════════════════════════════════════════
+    # ── ADMIN ──────────────────────────────────────────────────────────────
     elif role == "admin":
         if   active == "📊 الرئيسية":   pg_admin_dash()
         elif active == "👥 الفريق":     pg_team()
@@ -3037,9 +2579,7 @@ def main():
         elif active == "📞 تواصل معنا": pg_support()
         else: st.warning(f"الصفحة «{active}» غير متاحة.")
 
-    # ══════════════════════════════════════════════════════════════
-    #  SALES — sales team
-    # ══════════════════════════════════════════════════════════════
+    # ── SALES ──────────────────────────────────────────────────────────────
     elif role == "sales":
         if   active == "📊 الرئيسية":      pg_sales_dash()
         elif active == "➕ أوردر جديد":    pg_add_order()
@@ -3053,12 +2593,10 @@ def main():
         elif active == "🚨 بلاغ":            pg_incident_submit()
         else: st.warning(f"الصفحة «{active}» غير متاحة.")
 
-    # ══════════════════════════════════════════════════════════════
-    #  DESIGN — design team (strictly separated from production)
-    # ══════════════════════════════════════════════════════════════
+    # ── DESIGN ─────────────────────────────────────────────────────────────
     elif role == "design":
         if   active == "📊 الرئيسية":         pg_generic_dash(role)
-        elif active == "🎨 التصميم":           pg_design()         # design ONLY
+        elif active == "🎨 التصميم":           pg_design()
         elif active == "🖼️ Mockup للمبيعات":   pg_design_mockup()
         elif active == "🔔 إشعاراتي":          pg_notifications()
         elif active == "💬 المحادثة":           pg_chat()
@@ -3066,9 +2604,7 @@ def main():
         elif active == "🚨 بلاغ":               pg_incident_submit()
         else: st.warning(f"الصفحة «{active}» غير متاحة.")
 
-    # ══════════════════════════════════════════════════════════════
-    #  PURCHASE — purchasing team
-    # ══════════════════════════════════════════════════════════════
+    # ── PURCHASE ───────────────────────────────────────────────────────────
     elif role == "purchase":
         if   active == "📊 الرئيسية":     pg_generic_dash(role)
         elif active == "📦 طلبات الشراء":  pg_purchase_manage()
@@ -3076,12 +2612,10 @@ def main():
         elif active == "🚨 بلاغ":           pg_incident_submit()
         else: st.warning(f"الصفحة «{active}» غير متاحة.")
 
-    # ══════════════════════════════════════════════════════════════
-    #  PRODUCTION — production team (strictly separated from design)
-    # ══════════════════════════════════════════════════════════════
+    # ── PRODUCTION ─────────────────────────────────────────────────────────
     elif role == "production":
         if   active == "📊 الرئيسية":   pg_generic_dash(role)
-        elif active == "🖨️ الإنتاج":    pg_production()     # production ONLY
+        elif active == "🖨️ الإنتاج":    pg_production()
         elif active == "📋 الأوردرات":  show_orders("production", title="الأوردرات")
         elif active == "🔔 إشعاراتي":   pg_notifications()
         elif active == "💬 المحادثة":   pg_chat()
@@ -3089,9 +2623,7 @@ def main():
         elif active == "🚨 بلاغ":        pg_incident_submit()
         else: st.warning(f"الصفحة «{active}» غير متاحة.")
 
-    # ══════════════════════════════════════════════════════════════
-    #  AGENT — field sales agent
-    # ══════════════════════════════════════════════════════════════
+    # ── AGENT ──────────────────────────────────────────────────────────────
     elif role == "agent":
         if   active == "📊 الرئيسية":     pg_generic_dash(role)
         elif active == "➕ أوردر ميداني":  pg_agent_order()
