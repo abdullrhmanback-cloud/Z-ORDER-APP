@@ -45,6 +45,10 @@ AUTH        = f"{SUPA_URL}/auth/v1"
 STORE       = f"{SUPA_URL}/storage/v1"
 BUCKET      = "designs"
 
+# Resend Email API
+RESEND_KEY = "Re_Rsci7ZFp_6LKSps7pGi7kbEaKbkvBffrx"
+RESEND_URL = "https://api.resend.com/emails"
+
 RH = {          # REST headers
     "apikey":        SUPA_KEY,
     "Authorization": f"Bearer {SUPA_KEY}",
@@ -772,6 +776,109 @@ def _order_no() -> str:
 def _gen_otp() -> str:
     return "".join(random.choices(string.digits, k=6))
 
+
+def _send_otp_email(to_email: str, otp: str) -> bool:
+    """
+    Send OTP verification code via Resend API.
+    The OTP is NEVER displayed in the UI — sent only to the user's email.
+    Subject: Z-ORDER | رمز التحقق الخاص بك
+    Returns True on success, False on failure.
+    """
+    html_body = f"""
+    <div dir="rtl" style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;
+         background:#060708;color:#f0f2f8;padding:2rem;border-radius:12px;">
+      <div style="text-align:center;margin-bottom:1.5rem">
+        <span style="font-family:monospace;font-size:2rem;font-weight:700;color:#e8a020;">
+          Z-ORDER
+        </span><br>
+        <span style="font-size:.8rem;color:#8590a8;letter-spacing:.1em;">
+          BUILT FOR ORGANIZED TEAMS
+        </span>
+      </div>
+      <p style="font-size:1rem;margin-bottom:.5rem">مرحباً،</p>
+      <p style="color:#8590a8;font-size:.9rem;margin-bottom:1.5rem">
+        لإتمام التسجيل في Z-ORDER، استخدم رمز التحقق التالي:
+      </p>
+      <div style="background:#13161f;border:1px solid #232a3d;border-radius:10px;
+           padding:1.5rem;text-align:center;margin-bottom:1.5rem">
+        <span style="font-family:monospace;font-size:2.5rem;font-weight:700;
+              letter-spacing:.35em;color:#e8a020;">{otp}</span>
+      </div>
+      <p style="color:#8590a8;font-size:.8rem;margin-bottom:.5rem">
+        ⏰ الرمز صالح لمدة جلسة التسجيل الحالية فقط.
+      </p>
+      <p style="color:#3a4258;font-size:.75rem;">
+        إذا لم تطلب التسجيل في Z-ORDER، تجاهل هذا الإيميل.
+      </p>
+      <hr style="border-color:#1a1f2e;margin:1.5rem 0">
+      <p style="color:#3a4258;font-size:.7rem;text-align:center">
+        Developed by Abdulrahman Fallah · Z-ORDER © 2026
+      </p>
+    </div>
+    """
+    try:
+        r = requests.post(
+            RESEND_URL,
+            headers={
+                "Authorization": f"Bearer {RESEND_KEY}",
+                "Content-Type":  "application/json",
+            },
+            json={
+                "from":    "Z-ORDER <onboarding@resend.dev>",
+                "to":      [to_email],
+                "subject": "Z-ORDER | رمز التحقق الخاص بك",
+                "html":    html_body,
+            },
+            timeout=15,
+        )
+        return r.status_code in (200, 201)
+    except Exception:
+        return False
+
+
+def _send_reset_email(to_email: str, otp: str) -> bool:
+    """Send password reset OTP via Resend. OTP never shown in UI."""
+    html_body = f"""
+    <div dir="rtl" style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;
+         background:#060708;color:#f0f2f8;padding:2rem;border-radius:12px;">
+      <div style="text-align:center;margin-bottom:1.5rem">
+        <span style="font-family:monospace;font-size:2rem;font-weight:700;color:#e8a020;">
+          Z-ORDER
+        </span>
+      </div>
+      <p style="font-size:1rem;margin-bottom:.5rem">إعادة تعيين كلمة المرور</p>
+      <p style="color:#8590a8;font-size:.9rem;margin-bottom:1.5rem">
+        استخدم الرمز التالي لإعادة تعيين كلمة مرورك:
+      </p>
+      <div style="background:#13161f;border:1px solid #232a3d;border-radius:10px;
+           padding:1.5rem;text-align:center;margin-bottom:1.5rem">
+        <span style="font-family:monospace;font-size:2.5rem;font-weight:700;
+              letter-spacing:.35em;color:#ef4444;">{otp}</span>
+      </div>
+      <p style="color:#3a4258;font-size:.75rem;">
+        إذا لم تطلب إعادة التعيين، تجاهل هذا الإيميل.
+      </p>
+    </div>
+    """
+    try:
+        r = requests.post(
+            RESEND_URL,
+            headers={
+                "Authorization": f"Bearer {RESEND_KEY}",
+                "Content-Type":  "application/json",
+            },
+            json={
+                "from":    "Z-ORDER <onboarding@resend.dev>",
+                "to":      [to_email],
+                "subject": "Z-ORDER | رمز إعادة تعيين كلمة المرور",
+                "html":    html_body,
+            },
+            timeout=15,
+        )
+        return r.status_code in (200, 201)
+    except Exception:
+        return False
+
 STATUS_BADGE_MAP = {
     "جديد":             ("b-new", "🔵 جديد"),
     "قيد التصميم":      ("b-des", "🎨 تصميم"),
@@ -905,22 +1012,24 @@ def auth_screen() -> bool:
                 if not fp_email.strip():
                     st.error("يرجى إدخال الإيميل.")
                 else:
-                    em = fp_email.strip().lower()
-                    # 1. Try Supabase Auth reset (works for real email users)
-                    ok = _auth_reset_password(em)
-                    # 2. For custom-table users: generate OTP fallback
+                    em   = fp_email.strip().lower()
                     user = _get("users", {"email": em}, single=True)
                     if user:
                         otp = _gen_otp()
-                        # Store OTP temporarily (session only — valid for this session)
+                        with st.spinner("جاري إرسال رمز إعادة التعيين..."):
+                            email_sent = _send_reset_email(em, otp)
+                        # Store OTP in session — never in UI
                         st.session_state["reset_email"] = em
                         st.session_state["reset_otp"]   = otp
                         st.session_state["scr"]         = "reset_otp"
-                        st.info(f"📨 رمز إعادة التعيين (للاختبار): **{otp}**\n\n"
-                                f"_(في الإنتاج يُرسل عبر البريد الإلكتروني)_")
+                        if email_sent:
+                            st.success(f"✅ تم إرسال رمز إعادة التعيين إلى **{em}**")
+                        else:
+                            st.warning("⚠️ تعذّر إرسال الإيميل. "
+                                       "سيُرسل الرمز مجدداً عند المحاولة التالية.")
                         st.rerun()
                     else:
-                        # Still show success to avoid user enumeration
+                        # Always show success to avoid user enumeration
                         st.success("✅ إذا كان الإيميل مسجّلاً، ستصلك رسالة قريباً.")
 
         # ── RESET OTP ─────────────────────────────────────────────────────────
@@ -928,18 +1037,36 @@ def auth_screen() -> bool:
             _sbar(2, 0)
             st.markdown('<div class="auth-box">', unsafe_allow_html=True)
             st.markdown('<div class="sec">الخطوة 1 — تأكيد الهوية</div>', unsafe_allow_html=True)
-            st.info(f"📨 الرمز المرسل لـ **{st.session_state.get('reset_email','')}**: "
-                    f"`{st.session_state.get('reset_otp','')}`")
-            otp_in = st.text_input("🔑 أدخل الرمز (6 أرقام)", key="ro_in", max_chars=6)
+            # ── OTP is NEVER shown here — sent only to email ──────────────────
+            st.markdown(
+                f'<div style="background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.2);'
+                f'border-radius:var(--r);padding:.75rem 1rem;margin-bottom:.75rem;'
+                f'font-size:.84rem;color:var(--t2);">'
+                f'📨 تم إرسال رمز إعادة التعيين إلى:<br>'
+                f'<b style="color:var(--gold)">{st.session_state.get("reset_email","")}</b><br>'
+                f'<span style="font-size:.74rem;color:var(--t3);">'
+                f'يرجى التحقق من صندوق الوارد وصندوق Spam</span>'
+                f'</div>',
+                unsafe_allow_html=True)
+            otp_in = st.text_input("🔑 أدخل الرمز (6 أرقام)", key="ro_in",
+                                   max_chars=6, placeholder="······")
             ok_btn = st.button("تحقق ←", key="ro_ok")
+            # Resend option
+            if st.button("📨 إعادة إرسال الرمز", key="ro_resend"):
+                new_otp = _gen_otp()
+                with st.spinner("جاري الإرسال..."):
+                    ok = _send_reset_email(st.session_state.get("reset_email",""), new_otp)
+                if ok:
+                    st.session_state["reset_otp"] = new_otp
+                    st.success("✅ تم إرسال رمز جديد.")
+                else:
+                    st.error("❌ فشل الإرسال.")
             st.markdown('</div>', unsafe_allow_html=True)
-
             if st.button("← رجوع", key="ro_back"):
                 st.session_state["scr"] = "forgot"; st.rerun()
-
             if ok_btn:
                 if otp_in.strip() != st.session_state.get("reset_otp",""):
-                    st.error("❌ الرمز غير صحيح.")
+                    st.error("❌ الرمز غير صحيح. تحقق من بريدك الإلكتروني.")
                 else:
                     st.session_state["scr"] = "reset_pw"; st.rerun()
 
@@ -996,10 +1123,19 @@ def auth_screen() -> bool:
                         st.error("❌ هذا الإيميل مسجّل بالفعل.")
                     else:
                         otp = _gen_otp()
+                        # ── Send OTP via Resend — NEVER display on screen ────
+                        with st.spinner("جاري إرسال رمز التحقق إلى بريدك الإلكتروني..."):
+                            sent = _send_otp_email(em.strip().lower(), otp)
                         st.session_state.update(
                             r_cn=cn.strip(), r_em=em.strip().lower(),
                             r_pw=pw1, r_otp=otp, scr="r_otp")
-                        st.info(f"📨 رمز التأكيد: **{otp}** _(يُرسل بالبريد في الإنتاج)_")
+                        if sent:
+                            st.success(f"✅ تم إرسال رمز التحقق إلى **{em.strip()}**\n\n"
+                                       f"يرجى التحقق من بريدك الإلكتروني (وصندوق Spam).")
+                        else:
+                            # Resend failed — warn but continue (OTP still in session)
+                            st.warning("⚠️ تعذّر إرسال الإيميل. "
+                                       "يرجى التواصل مع الدعم الفني أو المحاولة لاحقاً.")
                         st.rerun()
 
         # ── REGISTER OTP ──────────────────────────────────────────────────────
@@ -1007,15 +1143,36 @@ def auth_screen() -> bool:
             _sbar(3, 1)
             st.markdown('<div class="auth-box">', unsafe_allow_html=True)
             st.markdown('<div class="sec">الخطوة 2 — تأكيد الهوية</div>', unsafe_allow_html=True)
-            st.info(f"📨 الرمز لـ **{st.session_state.get('r_em','')}**: `{st.session_state.get('r_otp','')}`")
-            oi = st.text_input("🔑 أدخل رمز التأكيد (6 أرقام)", key="rO", max_chars=6)
-            v  = st.button("تحقق والمتابعة ←", key="rOv")
+            # ── OTP is NEVER shown here — sent only to email ──────────────────
+            st.markdown(
+                f'<div style="background:rgba(232,160,32,.08);border:1px solid rgba(232,160,32,.2);'
+                f'border-radius:var(--r);padding:.75rem 1rem;margin-bottom:.75rem;'
+                f'font-size:.84rem;color:var(--t2);">'
+                f'📨 تم إرسال رمز التحقق إلى:<br>'
+                f'<b style="color:var(--gold)">{st.session_state.get("r_em","")}</b><br>'
+                f'<span style="font-size:.74rem;color:var(--t3);">'
+                f'يرجى التحقق من صندوق الوارد وصندوق Spam</span>'
+                f'</div>',
+                unsafe_allow_html=True)
+            oi  = st.text_input("🔑 أدخل رمز التحقق (6 أرقام)", key="rO",
+                                max_chars=6, placeholder="······")
+            v   = st.button("تحقق والمتابعة ←", key="rOv")
+            # Resend OTP option
+            if st.button("📨 إعادة إرسال الرمز", key="rOresend"):
+                new_otp = _gen_otp()
+                with st.spinner("جاري إعادة الإرسال..."):
+                    ok = _send_otp_email(st.session_state.get("r_em",""), new_otp)
+                if ok:
+                    st.session_state["r_otp"] = new_otp
+                    st.success("✅ تم إرسال رمز جديد إلى بريدك.")
+                else:
+                    st.error("❌ فشل إعادة الإرسال. تحقق من الاتصال.")
             st.markdown('</div>', unsafe_allow_html=True)
             if st.button("← رجوع", key="rObk"):
                 st.session_state["scr"] = "r1"; st.rerun()
             if v:
                 if oi.strip() != st.session_state.get("r_otp",""):
-                    st.error("❌ الرمز غير صحيح.")
+                    st.error("❌ الرمز غير صحيح. تحقق من بريدك الإلكتروني.")
                 else:
                     st.session_state["scr"] = "r2"; st.rerun()
 
