@@ -73,10 +73,10 @@ ROLE_PAGES = {
                    "🔔 الإشعارات","🚨 البلاغات","🗺️ المندوبون","💬 المحادثة","📞 تواصل معنا"],
     "sales":      ["📊 الرئيسية","➕ أوردر جديد","📋 أوردراتي","🖼️ التصاميم",
                    "💰 تقريري","📦 طلب شراء","🔔 إشعاراتي","💬 المحادثة","🚨 بلاغ"],
-    "design":     ["📊 الرئيسية","🎨 التصميم","🔔 إشعاراتي","💬 المحادثة","📦 طلب شراء","🚨 بلاغ"],
+    "design":     ["📊 الرئيسية","🎨 التصميم","🖼️ Mockup للمبيعات","🔔 إشعاراتي","💬 المحادثة","📦 طلب شراء","🚨 بلاغ"],
     "purchase":   ["📊 الرئيسية","📦 طلبات الشراء","💬 المحادثة","🚨 بلاغ"],
     "production": ["📊 الرئيسية","🖨️ الإنتاج","📋 الأوردرات","🔔 إشعاراتي","💬 المحادثة","📦 طلب شراء","🚨 بلاغ"],
-    "agent":      ["📊 الرئيسية","🗺️ زيارة جديدة","📋 زياراتي","💬 المحادثة","🚨 بلاغ"],
+    "agent":      ["📊 الرئيسية","➕ أوردر ميداني","🗺️ زيارة جديدة","📋 زياراتي","💬 المحادثة","🚨 بلاغ"],
 }
 
 # Order status progression (for notifications)
@@ -311,19 +311,112 @@ hr{border-color:var(--bdr) !important;margin:.85rem 0 !important;}
 .order-summary .total-row td{border-top:1px solid var(--bdr2);font-weight:700;
   font-size:.95rem;padding-top:.55rem;}
 
-/* ═══ MOBILE ≤ 768px ════════════════════════════════════════════════════ */
+/* ═══ MOBILE ≤ 768px — Comprehensive Responsive Fix ═══════════════════ */
 @media(max-width:768px){
-  .pw{padding:.6rem .42rem 7rem;}
-  .ph-icon{width:34px;height:34px;font-size:1.1rem;} .ph h2{font-size:.98rem;}
-  [data-testid="column"]{width:100% !important;flex:0 0 100% !important;
-    min-width:100% !important;padding:0 !important;}
-  .stButton>button{font-size:.82rem !important;min-height:48px !important;}
-  [data-testid="stMetricValue"]{font-size:1rem !important;}
-  .topbar{padding:.4rem .55rem;} .footer{font-size:.58rem;padding:.3rem .5rem;}
-  .bubble{max-width:92%;}
-  .order-summary td{font-size:.78rem;}
+
+  /* ── Content padding ── */
+  .pw{padding:.5rem .3rem 7rem !important;}
+
+  /* ── Page header smaller ── */
+  .ph-icon{width:32px;height:32px;font-size:1rem;}
+  .ph h2{font-size:.9rem;}
+  .ph p{font-size:.66rem;}
+
+  /* ── ALL columns stack vertically — core fix ── */
+  [data-testid="column"]{
+    width:100% !important;
+    flex:0 0 100% !important;
+    min-width:100% !important;
+    padding:2px 0 !important;
+  }
+
+  /* ── Buttons: full width, touch-friendly ── */
+  .stButton>button{
+    font-size:.82rem !important;
+    min-height:50px !important;
+    margin-bottom:4px !important;
+    padding:.55rem .7rem !important;
+  }
+
+  /* ── Inputs larger touch targets ── */
+  .stTextInput>div>div>input,
+  .stTextArea>div>div>textarea,
+  .stSelectbox>div>div,
+  .stNumberInput>div>div>input{
+    font-size:.9rem !important;
+    padding:.55rem .7rem !important;
+  }
+
+  /* ── Metrics compact ── */
+  [data-testid="stMetricValue"]{font-size:.95rem !important;}
+  [data-testid="stMetric"]{padding:.65rem .75rem !important;}
+
+  /* ── Tables: horizontal scroll on mobile ── */
+  .stDataFrame,[data-testid="stDataFrame"],iframe[title="st.dataframe"]{
+    overflow-x:auto !important;
+    display:block !important;
+    width:100% !important;
+    font-size:.76rem !important;
+  }
+
+  /* ── Top bar ── */
+  .topbar{
+    padding:.38rem .45rem !important;
+    gap:.4rem !important;
+  }
+  .zlogo{font-size:1.05rem !important;}
+  .zlogo .tag{display:none !important;}   /* hide tagline on small screens */
+  .uchip{padding:.22rem .55rem .22rem .28rem !important;}
+
+  /* ── Footer ── */
+  .footer{font-size:.55rem !important;padding:.28rem .45rem !important;}
+
+  /* ── Chat bubbles ── */
+  .bubble{max-width:94% !important;}
+
+  /* ── Order summary table ── */
+  .order-summary{padding:.65rem .5rem !important;}
+  .order-summary td{font-size:.75rem !important;padding:.22rem .3rem !important;}
+
+  /* ── Auth box ── */
+  .auth-box{padding:1.2rem .9rem !important;}
+  .logo-big{font-size:1.75rem !important;}
+
+  /* ── Expanders ── */
+  .streamlit-expanderHeader{font-size:.82rem !important;}
+
+  /* ── Tabs: horizontal scroll ── */
+  .stTabs [data-baseweb="tab-list"]{
+    overflow-x:auto !important;
+    flex-wrap:nowrap !important;
+    -webkit-overflow-scrolling:touch !important;
+  }
+  .stTabs [data-baseweb="tab"]{
+    font-size:.72rem !important;
+    padding:.3rem .45rem !important;
+    white-space:nowrap !important;
+  }
+
+  /* ── Nav selectbox ── */
+  .nav-sel .stSelectbox>div>div{font-size:.8rem !important;}
+
+  /* ── Status tracker: hide connector lines on mobile ── */
   .tracker{flex-wrap:wrap;gap:.3rem;}
   .tr-step::after{display:none;}
+
+  /* ── Notification items ── */
+  .notif-item{padding:.55rem .7rem !important;}
+
+  /* ── Cards ── */
+  .card{padding:.75rem .85rem !important;}
+}
+
+/* ═══ SMALL PHONES ≤ 380px ═══════════════════════════════════════════════ */
+@media(max-width:380px){
+  .pw{padding:.4rem .2rem 7rem !important;}
+  .ph h2{font-size:.82rem;}
+  .stButton>button{font-size:.76rem !important;}
+  .zlogo{font-size:.95rem !important;}
 }
 </style>
 """, unsafe_allow_html=True)
@@ -931,10 +1024,11 @@ def auth_screen() -> bool:
             _sbar(3, 2)
             st.markdown('<div class="auth-box">', unsafe_allow_html=True)
             st.markdown('<div class="sec">الخطوة 3 — معلومات حساب المدير</div>', unsafe_allow_html=True)
-            fn   = st.text_input("👤 الاسم الكامل للمدير *", key="r2fn")
-            un   = st.text_input("🏷️ اسم المستخدم *", placeholder="حروف إنجليزية صغيرة", key="r2un")
-            plan = st.selectbox("📦 الخطة", ["starter","pro","enterprise"], key="r2pl")
-            fin  = st.button("✅ إنشاء الحساب", key="r2cr")
+            fn  = st.text_input("👤 الاسم الكامل للمدير *", key="r2fn")
+            un  = st.text_input("🏷️ اسم المستخدم *",
+                                placeholder="مثال: ahmed_manager", key="r2un")
+            # No plan selection — system is fully open
+            fin = st.button("✅ إنشاء الحساب", key="r2cr")
             st.markdown('</div>', unsafe_allow_html=True)
             if st.button("← رجوع", key="r2bk"):
                 st.session_state["scr"] = "r_otp"; st.rerun()
@@ -942,10 +1036,14 @@ def auth_screen() -> bool:
                 if not all([fn.strip(), un.strip()]):
                     st.error("يرجى تعبئة جميع الحقول.")
                 else:
-                    _complete_reg(fn.strip(), un.strip().lower(),
-                                  st.session_state["r_cn"],
-                                  st.session_state["r_em"],
-                                  st.session_state["r_pw"], plan)
+                    _complete_reg(
+                        fn.strip(),
+                        un.strip().lower(),
+                        st.session_state["r_cn"],
+                        st.session_state["r_em"],
+                        st.session_state["r_pw"],
+                        # No plan argument
+                    )
 
         st.markdown(
             f'<div style="text-align:center;margin-top:1rem;color:var(--t3);font-size:.62rem">'
@@ -985,21 +1083,94 @@ def _do_login(idn: str, pw: str):
     st.rerun()
 
 
-def _complete_reg(full_name, username, company, email, pw, plan):
-    slug = "".join(c if c.isalnum() else "-" for c in company.lower())
-    ws   = _post("workspaces", {"name":company,"slug":slug,"plan":plan,"is_active":True})
-    if not ws: st.error("❌ تعذّر إنشاء الشركة. ربما الاسم مكرر."); return
-    user = _post("users", {
-        "workspace_id": ws["id"], "full_name": full_name,
-        "username": username, "email": email,
-        "password": _h(pw), "role": "admin",
-        "created_by": 0, "is_active": True,
-    })
-    if not user: st.error("❌ تعذّر إنشاء الحساب. الإيميل أو اسم المستخدم مكرر."); return
-    st.success(f"🎉 تم إنشاء الشركة **{company}** وحسابك كمدير بنجاح!\nسجّل دخولك الآن.")
-    for k in ("scr","r_cn","r_em","r_pw","r_otp"):
-        st.session_state.pop(k, None)
-    st.session_state["scr"] = "login"; st.rerun()
+def _complete_reg(full_name, username, company, email, pw):
+    """
+    Register a new admin + workspace.
+    Strategy:
+      1. Build slug from company name (alphanumeric only).
+      2. SELECT workspace by slug — if found, reuse its id.
+      3. If NOT found, INSERT new workspace and get the new id.
+      4. INSERT user linked to that workspace_id.
+      5. Full try/except + real error display at every step.
+    No plan field — system is fully open.
+    """
+    import re
+    # Build a safe slug: Arabic letters map to their transliterated equivalents aren't
+    # needed — we just strip non-alphanumeric and use the result; unique per company name.
+    slug = re.sub(r"[^a-zA-Z0-9\u0600-\u06FF]", "-", company.strip().lower())
+    slug = re.sub(r"-{2,}", "-", slug).strip("-") or "ws"
+
+    try:
+        # ── Step 1: check if workspace (slug) already exists ─────────────────
+        existing_ws = _get("workspaces", {"slug": slug}, single=True)
+
+        if existing_ws and isinstance(existing_ws, dict) and "id" in existing_ws:
+            # Reuse existing workspace — don't duplicate
+            ws_id   = existing_ws["id"]
+            ws_name = existing_ws.get("name", company)
+        else:
+            # ── Step 2: create new workspace ─────────────────────────────────
+            ws_result = _post("workspaces", {
+                "name":      company.strip(),
+                "slug":      slug,
+                "is_active": True,
+                # No "plan" field — system is open
+            })
+
+            # Guard: check for error or missing id
+            if ws_result is None:
+                st.error("❌ لم يُرجع Supabase أي استجابة عند إنشاء الشركة. تحقق من الاتصال.")
+                return
+            if isinstance(ws_result, dict) and ws_result.get("__error__"):
+                err = _post_err(ws_result)
+                st.error(f"❌ فشل إنشاء الشركة.\n\nالخطأ الحقيقي من Supabase:\n`{err}`")
+                return
+            if not isinstance(ws_result, dict) or "id" not in ws_result:
+                st.error(f"❌ استجابة غير متوقعة من Supabase: `{ws_result}`")
+                return
+
+            ws_id   = ws_result["id"]
+            ws_name = company.strip()
+
+        # ── Step 3: create admin user ─────────────────────────────────────────
+        user_result = _post("users", {
+            "workspace_id": ws_id,
+            "full_name":    full_name,
+            "username":     username,
+            "email":        email,
+            "password":     _h(pw),
+            "role":         "admin",
+            "created_by":   0,
+            "is_active":    True,
+        })
+
+        if user_result is None:
+            st.error("❌ لم يُرجع Supabase أي استجابة عند إنشاء المستخدم.")
+            return
+        if isinstance(user_result, dict) and user_result.get("__error__"):
+            err = _post_err(user_result)
+            st.error(f"❌ فشل إنشاء الحساب.\n\nالخطأ الحقيقي من Supabase:\n`{err}`")
+            return
+        if not isinstance(user_result, dict) or "id" not in user_result:
+            st.error(f"❌ استجابة غير متوقعة للمستخدم: `{user_result}`")
+            return
+
+        # ── Step 4: success ───────────────────────────────────────────────────
+        st.success(
+            f"🎉 تم إنشاء حسابك بنجاح!\n\n"
+            f"**الشركة:** {ws_name}\n"
+            f"**اسم المستخدم:** {username}\n\n"
+            f"سجّل دخولك الآن بالإيميل أو اسم المستخدم.")
+        for k in ("scr","r_cn","r_em","r_pw","r_otp"):
+            st.session_state.pop(k, None)
+        st.session_state["scr"] = "login"
+        st.rerun()
+
+    except KeyError as ke:
+        st.error(f"❌ خطأ برمجي (KeyError): المفتاح `{ke}` غير موجود في الاستجابة. "
+                 f"تأكد من وجود جميع أعمدة جدول workspaces في Supabase.")
+    except Exception as ex:
+        st.error(f"❌ خطأ غير متوقع أثناء التسجيل: `{type(ex).__name__}: {ex}`")
 
 # ══════════════════════════════════════════════════════════════════════════════
 #  TOP NAVIGATION
@@ -2041,6 +2212,236 @@ def pg_generic_dash(role):
                      use_container_width=True, hide_index=True)
 
 # ══════════════════════════════════════════════════════════════════════════════
+#  DESIGN: MOCKUP UPLOAD — visible to sales only for approval
+# ══════════════════════════════════════════════════════════════════════════════
+
+def pg_design_mockup():
+    hdr("🖼️","رفع Mockup للمراجعة","ارفع صورة Mockup للتصميم — تظهر لقسم المبيعات فقط للاعتماد")
+    guide("① ارفع صورة Mockup لكل أوردر (PNG/JPG/WEBP)<br>"
+          "② الصورة تُخزَّن في Supabase Storage وتظهر للمبيعات فقط<br>"
+          "③ المبيعات تعتمد أو ترفض من «التصاميم»")
+    WID  = wid()
+    rows = _get("orders", {"workspace_id": WID}, order="id.desc")
+    # Show orders that have no mockup yet or already have one
+    for r in rows:
+        with st.expander(f"🖼️ {r.get('order_number','')} — {r.get('customer_name','')} "
+                         f"{'✅ Mockup موجود' if r.get('mockup_url') else ''}"):
+            c1, c2 = st.columns(2)
+            c1.markdown(f"**الكمية:** {r.get('quantity','')}")
+            c1.markdown(f"**الحالة:** {r.get('status','')}")
+
+            # Show existing mockup
+            existing = r.get("mockup_url","")
+            if existing:
+                try:
+                    rr = requests.get(existing, timeout=10)
+                    if rr.status_code == 200:
+                        c2.image(rr.content, caption="Mockup الحالي", use_container_width=True)
+                except Exception:
+                    c2.markdown(f'[🔗 فتح Mockup]({existing})')
+
+            st.markdown("---")
+            mock_file = st.file_uploader(
+                "📸 ارفع صورة Mockup",
+                key=f"mock_{r['id']}",
+                type=["png","jpg","jpeg","webp"],
+                help="صورة المنتج النهائي للمراجعة"
+            )
+            if st.button("⬆️ رفع Mockup للمراجعة", key=f"mock_up_{r['id']}"):
+                if not mock_file:
+                    st.error("يرجى اختيار صورة أولاً.")
+                else:
+                    with st.spinner("جاري رفع Mockup..."):
+                        mock_url, mock_path = _upload(
+                            mock_file.read(),
+                            mock_file.name,
+                            mock_file.type or "image/png",
+                            subfolder="mockups",
+                        )
+                    if mock_url:
+                        _patch("orders", {"id": r["id"]}, {
+                            "mockup_url":  mock_url,
+                            "mockup_path": mock_path,
+                            "mockup_status": "قيد المراجعة",
+                        })
+                        _push_notification(
+                            WID,
+                            f"Mockup جديد للمراجعة: {r.get('order_number','')}",
+                            f"العميل: {r.get('customer_name','')} — يرجى المراجعة والاعتماد",
+                            target_roles=["sales", "admin"],
+                            order_id=r["id"],
+                        )
+                        _get_cached.clear()
+                        st.success("✅ تم رفع Mockup! إشعار أُرسل لقسم المبيعات للمراجعة.")
+                        st.rerun()
+                    else:
+                        st.error("❌ فشل الرفع. تحقق من الاتصال بـ Supabase Storage.")
+
+
+# ── Update sales preview to show mockup approval ─────────────────────────────
+def pg_sales_preview_v2():
+    hdr("🖼️","التصاميم والـ Mockup","راجع واعتمد ملفات التصميم والـ Mockup")
+    WID  = wid()
+    rows = _get("orders", {"workspace_id": WID}, order="id.desc")
+
+    t1, t2 = st.tabs(["🖼️ Mockup للاعتماد", "📁 ملفات التصميم"])
+
+    with t1:
+        mock_rows = [r for r in rows if r.get("mockup_url")]
+        if not mock_rows:
+            st.info("لا توجد Mockups للمراجعة بعد.")
+        for r in mock_rows:
+            status_color = {
+                "قيد المراجعة": "var(--gold)",
+                "معتمد":        "var(--grn)",
+                "مرفوض":        "var(--red)",
+            }.get(r.get("mockup_status",""), "var(--t2)")
+            with st.expander(
+                f"🖼️ {r.get('order_number','')} — {r.get('customer_name','')} "
+                f"[{r.get('mockup_status','—')}]"
+            ):
+                st.markdown(
+                    f"<span style='color:{status_color};font-weight:700'>"
+                    f"{r.get('mockup_status','—')}</span>",
+                    unsafe_allow_html=True)
+
+                # Show mockup image
+                mu = r.get("mockup_url","")
+                if mu:
+                    try:
+                        rr = requests.get(mu, timeout=15)
+                        if rr.status_code == 200:
+                            st.image(rr.content, use_container_width=True)
+                    except Exception:
+                        st.markdown(f'[🔗 فتح Mockup]({mu})')
+
+                st.markdown("---")
+                col1, col2 = st.columns(2)
+                if col1.button("✅ اعتماد Mockup", key=f"mock_appr_{r['id']}"):
+                    _patch("orders", {"id": r["id"]}, {"mockup_status": "معتمد"})
+                    _push_notification(WID, f"✅ Mockup معتمد: {r.get('order_number','')}",
+                                       f"المبيعات اعتمدت التصميم",
+                                       target_roles=["design"], order_id=r["id"])
+                    _get_cached.clear(); st.success("✅ تم اعتماد Mockup!"); st.rerun()
+                if col2.button("❌ رفض Mockup", key=f"mock_rej_{r['id']}"):
+                    _patch("orders", {"id": r["id"]}, {"mockup_status": "مرفوض"})
+                    _push_notification(WID, f"❌ Mockup مرفوض: {r.get('order_number','')}",
+                                       f"يرجى التعديل وإعادة الرفع",
+                                       target_roles=["design"], order_id=r["id"])
+                    _get_cached.clear(); st.warning("تم الرفض — إشعار أُرسل للمصمم."); st.rerun()
+
+    with t2:
+        design_rows = [r for r in rows if r.get("design_status") == "مكتمل"]
+        if not design_rows:
+            st.info("لا توجد ملفات تصميم مكتملة بعد.")
+        for r in design_rows:
+            with st.expander(f"🎨 {r.get('order_number','')} — {r.get('customer_name','')}"):
+                c1, c2 = st.columns(2)
+                c1.markdown(f"**الكمية:** {r.get('quantity','')}")
+                c2.markdown(f"**صمّمه:** {r.get('design_by','—')}")
+                fu = r.get("design_file_url","") or r.get("design_link","")
+                if fu:
+                    _dl_btn(fu, "⬇️ تحميل ملف التصميم")
+                    ext = fu.split(".")[-1].lower()
+                    if ext in ["png","jpg","jpeg","webp"]:
+                        try:
+                            rr = requests.get(fu, timeout=15)
+                            if rr.status_code == 200:
+                                st.image(rr.content, use_container_width=True)
+                        except Exception: pass
+                else:
+                    st.caption("لا يوجد ملف بعد.")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+#  AGENT: FIELD ORDER — مندوب يرفع أوردر من الميدان
+# ══════════════════════════════════════════════════════════════════════════════
+
+def pg_agent_order():
+    hdr("➕","أوردر ميداني","أدخل طلب العميل مباشرة من الميدان")
+    guide("① أدخل تفاصيل الطلب كما يطلبها العميل في الميدان<br>"
+          "② الأوردر يصل فوراً للوحة التحكم وقسم التصميم<br>"
+          "③ يمكنك إرفاق صورة للطلب المكتوب أو العينة")
+
+    with st.form("agent_order_form", clear_on_submit=True):
+        st.markdown('<div class="sec">👤 بيانات العميل</div>', unsafe_allow_html=True)
+        cust  = st.text_input("اسم العميل / المحل *", placeholder="مثال: محل أحمد للملابس")
+        phone = st.text_input("رقم الهاتف",           placeholder="مثال: 07901234567")
+        loc   = st.text_input("📍 الموقع / العنوان",  placeholder="مثال: شارع الكندي، بغداد")
+
+        st.markdown('<div class="sec">🖨️ تفاصيل الطلب</div>', unsafe_allow_html=True)
+        qty_txt  = st.text_input("الكمية *",      placeholder="مثال: 500 كارت، 2 بنر")
+        size_txt = st.text_input("القياس",         placeholder="مثال: A4، 80×60 سم")
+        biz      = st.text_input("النشاط التجاري", placeholder="مثال: محل ملابس، مطعم")
+        desc     = st.text_area("التفاصيل",        placeholder="ألوان، ملاحظات، نوع الورق...", height=80)
+
+        st.markdown('<div class="sec">💰 السعر (إن وُجد)</div>', unsafe_allow_html=True)
+        price_txt = st.text_input("السعر الكلي (د.ع)", placeholder="مثال: 35,000 د.ع")
+
+        # صورة الطلب المكتوب أو العينة
+        st.markdown('<div class="sec">📸 صورة الطلب (اختياري)</div>', unsafe_allow_html=True)
+        order_img = st.file_uploader("ارفع صورة الطلب أو العينة",
+                                     type=["jpg","jpeg","png","webp"],
+                                     help="صورة الطلب المكتوب أو عينة العميل")
+
+        sub = st.form_submit_button("✅ إرسال الأوردر للمكتب", use_container_width=True)
+
+    if sub:
+        if not cust.strip() or not qty_txt.strip():
+            st.error("اسم العميل والكمية مطلوبان.")
+        else:
+            img_url = ""
+            if order_img:
+                with st.spinner("رفع صورة الطلب..."):
+                    img_url, _ = _upload(
+                        order_img.read(),
+                        order_img.name,
+                        order_img.type or "image/jpeg",
+                        subfolder="agent_orders",
+                    )
+
+            ono = _order_no()
+            res = _post("orders", {
+                "workspace_id":    wid(),
+                "order_number":    ono,
+                "customer_name":   cust.strip(),
+                "customer_phone":  phone.strip(),
+                "quantity":        qty_txt.strip(),
+                "size":            size_txt.strip(),
+                "paper_type":      biz.strip(),
+                "description":     (desc.strip() +
+                                    (f"\n📍 الموقع: {loc.strip()}" if loc.strip() else "") +
+                                    (f"\n👤 أضافه المندوب: {st.session_state['uname']}" ) ),
+                "total_price":     price_txt.strip(),
+                "paid":            "",
+                "remaining":       "",
+                "delivery_date":   str(datetime.date.today()),
+                "created_by_id":   st.session_state["uid"],
+                "created_by_name": f"مندوب: {st.session_state['uname']}",
+                "status":          "جديد",
+                "design_status":   "قيد الانتظار",
+                "production_status":"قيد الانتظار",
+                "delivered":       False,
+                # Store agent image in mockup_url field for visibility
+                "mockup_url":      img_url,
+            })
+
+            if res and isinstance(res, dict) and "id" in res:
+                _push_notification(
+                    wid(),
+                    f"📍 أوردر ميداني جديد: {ono}",
+                    f"المندوب {st.session_state['uname']} | العميل: {cust.strip()} | {qty_txt.strip()}",
+                    target_roles=["admin", "sales", "design"],
+                    order_id=res["id"],
+                )
+                st.success(
+                    f"✅ تم إرسال الأوردر **{ono}** للمكتب!\n\n"
+                    f"العميل: {cust.strip()} | الكمية: {qty_txt.strip()}")
+            else:
+                st.error(f"❌ فشل الإرسال: {_post_err(res) if res else 'لا استجابة من Supabase'}")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 #  MAIN ROUTER
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -2076,14 +2477,15 @@ def main():
     elif active == "➕ أوردر جديد":                       pg_add_order()
     elif active == "📋 أوردراتي":
         show_orders("sales", uid_filter=st.session_state["uid"], title="أوردراتي")
-    elif active == "🖼️ التصاميم":                         pg_sales_preview()
+    elif active == "🖼️ التصاميم":                         pg_sales_preview_v2()   # updated
     elif role == "sales" and active == "💰 تقريري":       pg_financial()
     elif role == "sales" and active == "🔔 إشعاراتي":     pg_notifications()
 
     # ── DESIGN ───────────────────────────────────────────────────────────────
-    elif role == "design" and active == "📊 الرئيسية":  pg_generic_dash(role)
-    elif active == "🎨 التصميم":                         pg_design()
-    elif role == "design" and active == "🔔 إشعاراتي":  pg_notifications()
+    elif role == "design" and active == "📊 الرئيسية":           pg_generic_dash(role)
+    elif active == "🎨 التصميم":                                  pg_design()
+    elif role == "design" and active == "🖼️ Mockup للمبيعات":    pg_design_mockup()
+    elif role == "design" and active == "🔔 إشعاراتي":           pg_notifications()
 
     # ── PURCHASE ─────────────────────────────────────────────────────────────
     elif role == "purchase" and active == "📊 الرئيسية":  pg_generic_dash(role)
@@ -2096,9 +2498,10 @@ def main():
     elif role == "production" and active == "🔔 إشعاراتي":  pg_notifications()
 
     # ── AGENT ────────────────────────────────────────────────────────────────
-    elif role == "agent" and active == "📊 الرئيسية":  pg_generic_dash(role)
-    elif active == "🗺️ زيارة جديدة":                   pg_agent_new()
-    elif active == "📋 زياراتي":                        pg_agent_my()
+    elif role == "agent" and active == "📊 الرئيسية":   pg_generic_dash(role)
+    elif role == "agent" and active == "➕ أوردر ميداني": pg_agent_order()     # NEW
+    elif active == "🗺️ زيارة جديدة":                    pg_agent_new()
+    elif active == "📋 زياراتي":                         pg_agent_my()
 
     # ── SHARED ───────────────────────────────────────────────────────────────
     elif active == "📦 طلب شراء":  pg_purchase_submit()
