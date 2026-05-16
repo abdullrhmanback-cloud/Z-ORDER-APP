@@ -2270,20 +2270,20 @@ def pg_design():
                         if not file_url:
                             st.error("❌ فشل رفع الملف."); st.stop()
                     else:
-                        file_url = (r.get("design_file_url") or "")
+                        file_url  = (r.get("design_file_url") or "")
+                        store_path = ""
                     link = dl.strip() or (r.get("design_link") or "")
                     if not file_url and not link:
                         st.error("⚠️ يجب رفع ملف أو إدخال رابط التصميم.")
                     else:
                         ok = _patch("orders", {"id": oid}, {
-                            "design_status":       "مكتمل",
-                            "design_file_url":     file_url,
-                            "design_storage_path": store_path,
-                            "design_link":         link,
-                            "design_notes":        notes.strip(),
-                            "design_updated":      _ts(),
-                            "design_by":           st.session_state["uname"],
-                            "status":              "جاهز للطباعة",
+                            "design_status":   "مكتمل",
+                            "design_file_url": file_url or link,  # single column
+                            "design_link":     link,
+                            "design_notes":    notes.strip(),
+                            "design_updated":  _ts(),
+                            "design_by":       st.session_state["uname"],
+                            "status":          "جاهز للطباعة",
                         })
                         if ok:
                             _push_notification(
@@ -2319,8 +2319,11 @@ def pg_design():
                     if fu: _dl_btn(fu, "⬇️ تحميل")
                 with co3:
                     if st.button("🗑️ حذف", key=f"del_ds_{r['id']}"):
-                        sp = (r.get("design_storage_path") or "")
-                        if sp: _storage_delete(sp)
+                        fu = r.get("design_file_url","") or r.get("design_link","")
+                        if fu and fu.startswith("http") and STORE in fu:
+                            # Extract path from URL and delete from Storage
+                            path = fu.split(f"/object/public/{BUCKET}/")[-1]
+                            _storage_delete(path)
                         try:
                             requests.delete(f"{REST}/orders", headers=RH,
                                             params={"id": f"eq.{r['id']}"}, timeout=10)
@@ -2557,8 +2560,363 @@ def pg_agent_order():
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-#  MAIN ROUTER
+#  MISSING PAGE FUNCTIONS — restored
 # ══════════════════════════════════════════════════════════════════════════════
+
+def pg_generic_dash(role):
+    """Generic dashboard for design / purchase / production / agent roles."""
+    ri = ROLES.get(role, {"ar": role, "icon": "📊", "clr": "#e8a020"})
+    hdr(ri["icon"], f"لوحة {ri['ar']}", "نظرة عامة على الأوردرات")
+    guide(f"① راجع مهامك من القائمة أعلاه<br>② استخدم «بلاغ» لإبلاغ المدير")
+
+    # Raw GET — no workspace filter, same as design page
+    h = {"apikey": ACTIVE_KEY, "Authorization": f"Bearer {ACTIVE_KEY}",
+         "Content-Type": "application/json"}
+    rows = []
+    try:
+        resp = requests.get(f"{REST}/orders", headers=h,
+                            params={"select":"*","order":"id.desc","limit":"200"},
+                            timeout=12)
+        if resp.status_code == 200:
+            rows = resp.json() if isinstance(resp.json(), list) else []
+    except Exception:
+        pass
+
+    tot = len(rows)
+    nw  = sum(1 for o in rows if o.get("status") == "جديد")
+    ip  = sum(1 for o in rows if o.get("production_status") == "جاري الإنتاج")
+    dn  = sum(1 for o in rows if o.get("status") in ("مكتمل","تم التسليم"))
+
+    c1,c2,c3,c4 = st.columns(4)
+    c1.metric("إجمالي", tot); c2.metric("جديدة", nw)
+    c3.metric("جاري",   ip);  c4.metric("مكتملة", dn)
+    st.markdown("---")
+
+    recent = sorted(rows, key=lambda x: x.get("id",0), reverse=True)[:10]
+    if recent:
+        cols = ["order_number","customer_name","quantity","status","created_at"]
+        df   = pd.DataFrame(recent)
+        ok   = [c for c in cols if c in df.columns]
+        st.dataframe(df[ok].rename(columns={
+            "order_number":"الأوردر","customer_name":"العميل",
+            "quantity":"الكمية","status":"الحالة","created_at":"التاريخ"}),
+            use_container_width=True, hide_index=True)
+
+
+def pg_production():
+    hdr("🖨️","قسم الإنتاج","نفّذ الأوردرات الجاهزة")
+    guide("① الأوردر يظهر هنا بعد اكتمال التصميم<br>"
+          "② حمّل ملف التصميم واطبع<br>"
+          "③ 'إتمام وحذف الملف' يُكمل الطلب ويحرر مساحة Storage")
+
+    h = {"apikey": ACTIVE_KEY, "Authorization": f"Bearer {ACTIVE_KEY}",
+         "Content-Type": "application/json"}
+    rows = []
+    try:
+        resp = requests.get(f"{REST}/orders", headers=h,
+                            params={"select":"*","order":"id.desc","limit":"300"},
+                            timeout=12)
+        if resp.status_code == 200:
+            rows = resp.json() if isinstance(resp.json(), list) else []
+    except Exception:
+        pass
+
+    ready  = [r for r in rows if r.get("design_status")=="مكتمل"
+              and r.get("production_status","") not in ("جاري الإنتاج","مكتمل")]
+    prting = [r for r in rows if r.get("production_status")=="جاري الإنتاج"]
+    done   = [r for r in rows if r.get("production_status")=="مكتمل"]
+
+    t1,t2,t3 = st.tabs([f"🟢 جاهز ({len(ready)})",
+                         f"🟠 جاري ({len(prting)})",
+                         f"✅ مكتمل ({len(done)})"])
+
+    def _complete(r, pn=""):
+        _patch("orders",{"id":r["id"]},{
+            "production_status":"مكتمل",
+            "production_notes":pn,
+            "production_updated":_ts(),
+            "production_by":st.session_state["uname"],
+            "status":"جاهز للتسليم",
+            "design_file_url":"",
+        })
+        _push_notification(wid(),
+            f"جاهز للتسليم: {r.get('order_number','')}",
+            f"العميل: {r.get('customer_name','')}",
+            target_roles=["admin","sales"], order_id=r["id"])
+        _get_cached.clear()
+
+    with t1:
+        if not ready: st.info("⏳ لا توجد أوردرات جاهزة.")
+        for r in ready:
+            with st.expander(f"🟢 {r.get('order_number','')} — {r.get('customer_name','')}"):
+                c1,c2 = st.columns(2)
+                c1.markdown(f"**الكمية:** {r.get('quantity','—')}")
+                c1.markdown(f"**القياس:** {r.get('size','—')}")
+                c2.markdown(f"**صمّمه:** {r.get('design_by','—')}")
+                c2.markdown(f"**ملاحظات:** {r.get('design_notes','—')}")
+                fu = r.get("design_file_url","") or r.get("design_link","")
+                if fu: _dl_btn(fu,"⬇️ تحميل ملف التصميم للطباعة")
+                pn = st.text_area("📝 ملاحظات الإنتاج", key=f"pn_{r['id']}", height=55)
+                col1,col2 = st.columns(2)
+                if col1.button("▶️ بدء الطباعة", key=f"st_{r['id']}"):
+                    _patch("orders",{"id":r["id"]},{
+                        "production_status":"جاري الإنتاج",
+                        "production_notes":pn,
+                        "production_updated":_ts(),
+                        "production_by":st.session_state["uname"],
+                        "status":"جاري الإنتاج"})
+                    _get_cached.clear(); st.success("▶️ بدأ الإنتاج!"); st.rerun()
+                if col2.button("✅ إتمام وحذف الملف", key=f"fi_{r['id']}"):
+                    _complete(r, pn)
+                    st.success("✅ مكتمل!"); st.rerun()
+
+    with t2:
+        if not prting: st.info("لا توجد طباعة جارية.")
+        for r in prting:
+            with st.expander(f"🟠 {r.get('order_number','')} — {r.get('customer_name','')}"):
+                fu = r.get("design_file_url","") or r.get("design_link","")
+                if fu: _dl_btn(fu)
+                if st.button("✅ إتمام", key=f"fn_{r['id']}"):
+                    _complete(r); st.success("✅ مكتمل!"); st.rerun()
+
+    with t3:
+        if not done: st.info("لا توجد أوردرات مكتملة.")
+        for r in done:
+            st.markdown(
+                f'<div class="card"><b>{r.get("order_number","")}</b>'
+                f' — {r.get("customer_name","")}'
+                f'&nbsp;{bdg(r.get("status","مكتمل"))}'
+                f'<br><small style="color:var(--t3)">اكتمل: '
+                f'{str(r.get("production_updated","—"))[:16]}</small></div>',
+                unsafe_allow_html=True)
+
+
+def pg_purchase_submit():
+    hdr("📦","طلب شراء","اطلب مواد من قسم المشتريات")
+    with st.form("pur", clear_on_submit=True):
+        c1,c2 = st.columns(2)
+        item  = c1.text_input("اسم الصنف *",  placeholder="حبر أسود، ورق A3...")
+        qty   = c2.text_input("الكمية *",      placeholder="5 علب...")
+        urg   = st.selectbox("الأولوية", ["عادي","عاجل","طارئ"])
+        notes = st.text_area("ملاحظات", height=65)
+        sub   = st.form_submit_button("📤 إرسال", use_container_width=True)
+    if sub:
+        if not item.strip() or not qty.strip():
+            st.error("يرجى تحديد الصنف والكمية.")
+        else:
+            role = st.session_state.get("role","sales")
+            _post("purchase_requests",{
+                "requester_id":   st.session_state.get("uid",0),
+                "requester_name": st.session_state.get("uname",""),
+                "department":     ROLES.get(role,{}).get("ar",role),
+                "item_name":      item.strip(),
+                "quantity":       qty.strip(),
+                "urgency":        urg,
+                "notes":          notes.strip(),
+                "status":         "قيد المراجعة",
+            })
+            st.success("✅ تم إرسال طلب الشراء!")
+
+
+def pg_purchase_manage():
+    hdr("📦","إدارة طلبات الشراء","راجع وأدر جميع الطلبات")
+    rows = _get("purchase_requests", order="id.desc")
+    pend = [r for r in rows if r.get("status")=="قيد المراجعة"]
+    rest = [r for r in rows if r.get("status")!="قيد المراجعة"]
+    t1,t2 = st.tabs([f"⏳ قيد المراجعة ({len(pend)})",f"📋 السجل ({len(rest)})"])
+    with t1:
+        if not pend: st.success("🎉 لا توجد طلبات معلقة!")
+        for r in pend:
+            with st.expander(f"📦 {r.get('item_name','')} — {r.get('requester_name','')}"):
+                st.markdown(f"**الكمية:** {r.get('quantity','')} | **الأولوية:** {r.get('urgency','')}")
+                if r.get("notes"): st.markdown(f"**ملاحظات:** {r.get('notes','')}")
+                col1,col2 = st.columns(2)
+                if col1.button("✅ موافقة", key=f"app_{r['id']}"):
+                    _patch("purchase_requests",{"id":r["id"]},
+                           {"status":"موافق عليه","reviewed_by":st.session_state.get("uname",""),"reviewed_at":_ts()})
+                    st.success("✅ موافق."); _get_cached.clear(); st.rerun()
+                if col2.button("❌ رفض", key=f"rej_{r['id']}"):
+                    _patch("purchase_requests",{"id":r["id"]},
+                           {"status":"مرفوض","reviewed_by":st.session_state.get("uname",""),"reviewed_at":_ts()})
+                    st.warning("تم الرفض."); _get_cached.clear(); st.rerun()
+    with t2:
+        if not rest: st.info("لا يوجد سجل.")
+        else:
+            df = pd.DataFrame(rest)
+            safe = [c for c in ["requester_name","item_name","quantity","urgency","status","reviewed_by","created_at"]
+                    if c in df.columns]
+            st.dataframe(df[safe].rename(columns={
+                "requester_name":"الموظف","item_name":"الصنف","quantity":"الكمية",
+                "urgency":"الأولوية","status":"الحالة","reviewed_by":"راجعه","created_at":"التاريخ"}),
+                use_container_width=True, hide_index=True)
+
+
+def pg_agent_new():
+    hdr("🗺️","تسجيل زيارة عميل","وثّق زيارتك الميدانية")
+    with st.form("av", clear_on_submit=True):
+        cust  = st.text_input("👤 اسم العميل / المحل *")
+        loc   = st.text_input("📍 العنوان")
+        vs    = st.selectbox("📊 حالة العميل", ["محتمل","اشترى","لن يشتري"])
+        notes = st.text_area("📝 ملاحظات", height=65)
+        img   = st.file_uploader("📸 صورة المحل", type=["jpg","jpeg","png","webp"])
+        sub   = st.form_submit_button("✅ حفظ الزيارة", use_container_width=True)
+    if sub:
+        if not cust.strip(): st.error("يرجى إدخال اسم العميل.")
+        else:
+            img_url = ""
+            if img:
+                with st.spinner("رفع الصورة..."):
+                    img_url, _ = _upload(img.read(), img.name,
+                                         img.type or "image/jpeg", subfolder="agents")
+            _post("agent_visits",{
+                "agent_id":     st.session_state.get("uid",0),
+                "agent_name":   st.session_state.get("uname",""),
+                "customer_name":cust.strip(),
+                "location":     loc.strip(),
+                "visit_status": vs,
+                "notes":        notes.strip(),
+                "image_path":   img_url,
+            })
+            st.success(f"✅ تم تسجيل زيارة **{cust.strip()}**!")
+
+
+def pg_agent_my():
+    hdr("📋","زياراتي","سجل زياراتك")
+    rows = _get("agent_visits",{"agent_id":st.session_state.get("uid",0)},order="id.desc")
+    if not rows: st.info("لم تسجّل أي زيارة بعد."); return
+    AGT = {"اشترى":("b-abuy","✅"),"محتمل":("b-apot","🔵"),"لن يشتري":("b-ano","❌")}
+    for r in rows:
+        c,l = AGT.get(r.get("visit_status","محتمل"),("b-apot","🔵"))
+        st.markdown(
+            f'<div class="card"><b>{r.get("customer_name","")}</b>'
+            f'&nbsp;<span class="badge {c}">{l} {r.get("visit_status","")}</span>'
+            f'<br><small style="color:var(--t2)">📍 {r.get("location","—")} | '
+            f'🗓 {str(r.get("visited_at",""))[:16]}</small>'
+            f'{"<br><small>"+r.get("notes","")+"</small>" if r.get("notes") else ""}'
+            f'</div>', unsafe_allow_html=True)
+
+
+def pg_agent_reports():
+    hdr("🗺️","تقارير المندوبين","أداء فريق المبيعات الميداني")
+    visits = _get("agent_visits", order="id.desc")
+    if not visits: st.info("لا توجد زيارات."); return
+    ag = {}
+    for v in visits:
+        n = v.get("agent_name","")
+        ag.setdefault(n,{"الزيارات":0,"اشترى":0,"محتمل":0,"لن يشتري":0})
+        ag[n]["الزيارات"] += 1
+        vs = v.get("visit_status","محتمل")
+        ag[n][vs] = ag[n].get(vs,0)+1
+    st.dataframe(pd.DataFrame([{"المندوب":k,**v} for k,v in ag.items()]),
+                 use_container_width=True, hide_index=True)
+
+
+def pg_chat():
+    hdr("💬","محادثة الفريق","تواصل مع زملائك")
+    uid = st.session_state.get("uid",0)
+    with st.form("cf", clear_on_submit=True):
+        msg  = st.text_input("✍️ اكتب رسالتك...", placeholder="مناقشة، ملاحظة...")
+        sent = st.form_submit_button("إرسال ←", use_container_width=True)
+    if sent and msg.strip():
+        _post("chat_messages",{
+            "sender_id":   uid,
+            "sender_name": st.session_state.get("uname",""),
+            "sender_role": st.session_state.get("role",""),
+            "message":     msg.strip(),
+        })
+        _get_cached.clear(); st.rerun()
+
+    msgs = _get("chat_messages", order="id.desc", limit=60)
+    msgs.reverse()
+    if not msgs: st.info("لا توجد رسائل. ابدأ المحادثة!"); return
+    st.markdown('<div class="chat-wrap">', unsafe_allow_html=True)
+    for m in msgs:
+        is_me = m.get("sender_id") == uid
+        ri    = ROLES.get(m.get("sender_role",""),{"clr":"#e8a020"})
+        cls   = "me" if is_me else "other"
+        st.markdown(
+            f'<div class="bubble {cls}">'
+            f'<div class="bn" style="color:{ri["clr"]}">'
+            f'{m.get("sender_name","")} · {ROLES.get(m.get("sender_role",""),{"ar":""})["ar"]}</div>'
+            f'{m.get("message","")}'
+            f'<div class="bt">{str(m.get("sent_at",""))[:16]}</div>'
+            f'</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
+def pg_financial():
+    hdr("💰","التقارير المالية","السعر والمبالغ لجميع الأوردرات")
+    h = {"apikey": ACTIVE_KEY, "Authorization": f"Bearer {ACTIVE_KEY}",
+         "Content-Type": "application/json"}
+    rows = []
+    try:
+        resp = requests.get(f"{REST}/orders", headers=h,
+                            params={"select":"*","order":"id.desc","limit":"500"},
+                            timeout=12)
+        if resp.status_code == 200:
+            rows = resp.json() if isinstance(resp.json(), list) else []
+    except Exception:
+        pass
+    if not rows: st.info("لا توجد أوردرات."); return
+    df = pd.DataFrame(rows)
+    show_cols = ["order_number","customer_name","quantity","total_price","paid","remaining","status","created_at"]
+    ok = [c for c in show_cols if c in df.columns]
+    st.dataframe(df[ok].rename(columns={
+        "order_number":"الأوردر","customer_name":"العميل","quantity":"الكمية",
+        "total_price":"السعر الكلي","paid":"المدفوع","remaining":"المتبقي",
+        "status":"الحالة","created_at":"التاريخ"}),
+        use_container_width=True, hide_index=True)
+    st.download_button("⬇️ تصدير CSV",
+        df[ok].to_csv(index=False).encode("utf-8-sig"),
+        file_name=f"zorder_financial_{datetime.date.today()}.csv",
+        mime="text/csv", use_container_width=True)
+
+
+def pg_incident_submit():
+    role = st.session_state.get("role","sales")
+    hdr("🚨","بلاغ خلل أو نقص","أبلغ المدير عن أي مشكلة")
+    with st.form("inc", clear_on_submit=True):
+        desc = st.text_area("📝 وصف المشكلة *", placeholder="نقص حبر، عطل طابعة...")
+        sev  = st.selectbox("⚠️ الخطورة", ["منخفض","متوسط","عالي"])
+        sub  = st.form_submit_button("📤 إرسال", use_container_width=True)
+    if sub:
+        if not desc.strip(): st.error("يرجى كتابة الوصف.")
+        else:
+            _post("incident_reports",{
+                "reporter_id":   st.session_state.get("uid",0),
+                "reporter_name": st.session_state.get("uname",""),
+                "department":    ROLES.get(role,{}).get("ar",role),
+                "description":   desc.strip(),
+                "severity":      sev,
+                "status":        "مفتوح",
+            })
+            st.success("✅ تم إرسال البلاغ!")
+
+
+def pg_all_incidents():
+    hdr("🚨","بلاغات الأعطال","جميع البلاغات الواردة")
+    rows = _get("incident_reports", order="id.desc")
+    if not rows: st.success("🎉 لا توجد بلاغات!"); return
+    op = [r for r in rows if r.get("status")=="مفتوح"]
+    rs = [r for r in rows if r.get("status")!="مفتوح"]
+    t1,t2 = st.tabs([f"🔴 مفتوحة ({len(op)})",f"✅ محلولة ({len(rs)})"])
+    SEV = {"منخفض":("b-sev-lo","🟢"),"متوسط":("b-sev-md","🟡"),"عالي":("b-sev-hi","🔴")}
+    for tab,lst in [(t1,op),(t2,rs)]:
+        with tab:
+            if not lst: st.info("لا توجد."); continue
+            for r in lst:
+                sc,sl = SEV.get(r.get("severity","متوسط"),("b-sev-md","🟡"))
+                with st.expander(f"{sl} {r.get('severity','')} — {r.get('department','')} — {str(r.get('created_at',''))[:16]}"):
+                    st.markdown(f"**المبلّغ:** {r.get('reporter_name','')}")
+                    st.markdown(f"**الوصف:** {r.get('description','')}")
+                    if r.get("status")=="مفتوح":
+                        if st.button("✅ محلول", key=f"rs_{r['id']}"):
+                            _patch("incident_reports",{"id":r["id"]},
+                                   {"status":"محلول","resolved_at":_ts()})
+                            _get_cached.clear(); st.rerun()
+
+
+
 
 def main():
     # 1. Auth gate — nothing renders until logged in
