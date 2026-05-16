@@ -1844,10 +1844,9 @@ def pg_admin_dash():
 def pg_team():
     hdr("👥","إدارة الفريق","أضف أعضاء الفريق وحدد صلاحياتهم")
     guide("① أضف موظفاً جديداً بالاسم واليوزر وكلمة المرور والدور فقط<br>"
-          "② لا حاجة لـ workspace — النظام مفتوح<br>"
-          "③ يمكن تفعيل أو تعطيل أي حساب")
+          "② يمكن تفعيل أو تعطيل أي حساب")
 
-    # ── Fetch all users (no workspace filter) ────────────────────────────
+    # ── Fetch users — then filter client-side ────────────────────────────
     h = {
         "apikey":        ACTIVE_KEY,
         "Authorization": f"Bearer {ACTIVE_KEY}",
@@ -1857,17 +1856,42 @@ def pg_team():
         resp = requests.get(
             f"{REST}/users",
             headers=h,
-            params={"select": "*", "order": "id.asc", "limit": "200"},
+            params={"select": "*", "order": "id.asc", "limit": "500"},
             timeout=10,
         )
-        rows = resp.json() if resp.status_code == 200 else []
+        all_rows = resp.json() if resp.status_code == 200 else []
     except Exception:
-        rows = []
+        all_rows = []
+
+    # ── Client-side filter ────────────────────────────────────────────────
+    # Rule 1: never show superadmin row
+    # Rule 2: if this admin has a workspace_id, show only same-workspace users
+    #         OR users with no workspace_id (legacy accounts created before workspace logic)
+    # Rule 3: if no workspace_id in session (legacy admin), hide superadmin only
+    cur_wid = st.session_state.get("workspace_id", 0)
+    cur_uid = st.session_state.get("uid", 0)
+
+    def _should_show(u: dict) -> bool:
+        # Always hide superadmin role
+        if u.get("role") == "superadmin":
+            return False
+        # Always hide the platform SA_EMAIL account even if stored in DB
+        if (u.get("email") or "").lower() == SA_EMAIL.lower():
+            return False
+        # If admin has a workspace, show only same workspace
+        if cur_wid:
+            u_wid = u.get("workspace_id")
+            # Show: same workspace, OR workspace=0/None (legacy)
+            if u_wid and u_wid != cur_wid:
+                return False
+        return True
+
+    rows = [u for u in all_rows if _should_show(u)]
 
     if rows:
         safe_cols = [c for c in
                      ["id","full_name","username","email","role","is_active","created_at"]
-                     if c in (rows[0].keys() if rows else [])]
+                     if c in rows[0].keys()]
         df = pd.DataFrame(rows)[safe_cols]
         df["is_active"] = df["is_active"].map(
             {True:"✅ نشط", False:"🚫 موقوف", 1:"✅ نشط", 0:"🚫 موقوف"})
@@ -1877,7 +1901,7 @@ def pg_team():
             "is_active":"الحالة","created_at":"التاريخ"}),
             use_container_width=True, hide_index=True)
     else:
-        st.info("لا يوجد موظفون بعد أو تعذّر جلب القائمة.")
+        st.info("لا يوجد موظفون بعد — أضف أول موظف من النموذج أدناه.")
 
     st.markdown("---")
     st.markdown('<div class="sec">➕ إضافة موظف جديد</div>', unsafe_allow_html=True)
