@@ -46,8 +46,10 @@ STORE       = f"{SUPA_URL}/storage/v1"
 BUCKET      = "designs"
 
 # Resend Email API
-RESEND_KEY = "Re_Rsci7ZFp_6LKSps7pGi7kbEaKbkvBffrx"
-RESEND_URL = "https://api.resend.com/emails"
+SMTP_SERVER = st.secrets["SMTP_SERVER"]
+SMTP_PORT = st.secrets["SMTP_PORT"]
+SENDER_EMAIL = st.secrets["SENDER_EMAIL"]
+SENDER_PASSWORD = st.secrets["SENDER_PASSWORD"]
 
 RH = {          # REST headers
     "apikey":        SUPA_KEY,
@@ -765,79 +767,14 @@ def _push_notification(workspace_id: int, title: str, body: str,
     })
 
 # ── Business helpers ───────────────────────────────────────────────────────────
-
-def wid() -> int:
-    return st.session_state.get("workspace_id", 0)
-
-def _order_no() -> str:
-    n = _count("orders", {"workspace_id": wid()})
-    return f"ZO-{datetime.date.today().strftime('%y%m%d')}-{n+1:04d}"
-
-def _gen_otp() -> str:
-    return "".join(random.choices(string.digits, k=6))
-
-
-def _send_otp_email(to_email: str, otp: str) -> bool:
-    """
-    Send OTP verification code via Resend API.
-    The OTP is NEVER displayed in the UI — sent only to the user's email.
-    Subject: Z-ORDER | رمز التحقق الخاص بك
-    Returns True on success, False on failure.
-    """
-    html_body = f"""
-    <div dir="rtl" style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;
-         background:#060708;color:#f0f2f8;padding:2rem;border-radius:12px;">
-      <div style="text-align:center;margin-bottom:1.5rem">
-        <span style="font-family:monospace;font-size:2rem;font-weight:700;color:#e8a020;">
-          Z-ORDER
-        </span><br>
-        <span style="font-size:.8rem;color:#8590a8;letter-spacing:.1em;">
-          BUILT FOR ORGANIZED TEAMS
-        </span>
-      </div>
-      <p style="font-size:1rem;margin-bottom:.5rem">مرحباً،</p>
-      <p style="color:#8590a8;font-size:.9rem;margin-bottom:1.5rem">
-        لإتمام التسجيل في Z-ORDER، استخدم رمز التحقق التالي:
-      </p>
-      <div style="background:#13161f;border:1px solid #232a3d;border-radius:10px;
-           padding:1.5rem;text-align:center;margin-bottom:1.5rem">
-        <span style="font-family:monospace;font-size:2.5rem;font-weight:700;
-              letter-spacing:.35em;color:#e8a020;">{otp}</span>
-      </div>
-      <p style="color:#8590a8;font-size:.8rem;margin-bottom:.5rem">
-        ⏰ الرمز صالح لمدة جلسة التسجيل الحالية فقط.
-      </p>
-      <p style="color:#3a4258;font-size:.75rem;">
-        إذا لم تطلب التسجيل في Z-ORDER، تجاهل هذا الإيميل.
-      </p>
-      <hr style="border-color:#1a1f2e;margin:1.5rem 0">
-      <p style="color:#3a4258;font-size:.7rem;text-align:center">
-        Developed by Abdulrahman Fallah · Z-ORDER © 2026
-      </p>
-    </div>
-    """
-    try:
-        r = requests.post(
-            RESEND_URL,
-            headers={
-                "Authorization": f"Bearer {RESEND_KEY}",
-                "Content-Type":  "application/json",
-            },
-            json={
-                "from":    "Z-ORDER <onboarding@resend.dev>",
-                "to":      [to_email],
-                "subject": "Z-ORDER | رمز التحقق الخاص بك",
-                "html":    html_body,
-            },
-            timeout=15,
-        )
-        return r.status_code in (200, 201)
-    except Exception:
-        return False
-
+import smtplib
+from email.mime.text import MIMEText
+from email.header import Header
 
 def _send_reset_email(to_email: str, otp: str) -> bool:
-    """Send password reset OTP via Resend. OTP never shown in UI."""
+    """Send password reset OTP via Gmail SMTP. OTP never shown in UI."""
+    
+    # نفس التصميم الفخم والسينمائي لـ Z-ORDER الذي كان في Resend
     html_body = f"""
     <div dir="rtl" style="font-family:Arial,sans-serif;max-width:480px;margin:0 auto;
          background:#060708;color:#f0f2f8;padding:2rem;border-radius:12px;">
@@ -860,25 +797,27 @@ def _send_reset_email(to_email: str, otp: str) -> bool:
       </p>
     </div>
     """
+    
     try:
-        r = requests.post(
-            RESEND_URL,
-            headers={
-                "Authorization": f"Bearer {RESEND_KEY}",
-                "Content-Type":  "application/json",
-            },
-            json={
-                "from":    "Z-ORDER <onboarding@resend.dev>",
-                "to":      [to_email],
-                "subject": "Z-ORDER | رمز إعادة تعيين كلمة المرور",
-                "html":    html_body,
-            },
-            timeout=15,
-        )
-        return r.status_code in (200, 201)
-    except Exception:
+        # إعداد نص الرسالة وتحديد نوعها HTML ودعم الترميز العربي UTF-8
+        msg = MIMEText(html_body, 'html', 'utf-8')
+        msg['Subject'] = Header("Z-ORDER | رمز إعادة تعيين كلمة المرور", 'utf-8')
+        msg['From'] = SENDER_EMAIL
+        msg['To'] = to_email
+        
+        # فتح الاتصال الآمن مع سيرفر Gmail والإرسال فوراً
+        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=15)
+        server.starttls()  # تشفير الاتصال
+        server.login(SENDER_EMAIL, SENDER_PASSWORD)
+        server.sendmail(SENDER_EMAIL, [to_email], msg.as_string())
+        server.quit()
+        
+        return True
+    except Exception as e:
+        # طباعة الخطأ في الكونسول الخلفي فقط للمطور لتتبع المشاكل إن وجدت
+        print(f"SMTP Reset Email Error: {e}")
         return False
-
+        
 STATUS_BADGE_MAP = {
     "جديد":             ("b-new", "🔵 جديد"),
     "قيد التصميم":      ("b-des", "🎨 تصميم"),
