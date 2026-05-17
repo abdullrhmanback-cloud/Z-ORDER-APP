@@ -1875,15 +1875,17 @@ def pg_team():
         # Always hide superadmin role
         if u.get("role") == "superadmin":
             return False
-        # Always hide the platform SA_EMAIL account even if stored in DB
+        # Always hide the platform SA_EMAIL account
         if (u.get("email") or "").lower() == SA_EMAIL.lower():
             return False
-        # If admin has a workspace, show only same workspace
+        # Workspace isolation — string-safe comparison
         if cur_wid:
+            cur_s = str(cur_wid)
             u_wid = u.get("workspace_id")
-            # Show: same workspace, OR workspace=0/None (legacy)
-            if u_wid and u_wid != cur_wid:
-                return False
+            if u_wid is not None:
+                # If user has a workspace and it doesn't match ours — hide
+                if str(u_wid) not in ("0", "", cur_s):
+                    return False
         return True
 
     rows = [u for u in all_rows if _should_show(u)]
@@ -2199,9 +2201,13 @@ def pg_design():
         fetch_error = str(ex)
 
     # ── Diagnostic expander ─────────────────────────────────────────────
+    cur_wid_diag = st.session_state.get("workspace_id", 0)
     with st.expander("🔍 تشخيص (للمطور)", expanded=bool(fetch_error or not rows)):
         key_type = "service-role" if ACTIVE_KEY != SUPA_KEY else "anon/publishable"
-        st.markdown(f"**المفتاح:** `{key_type}` | **الطلبات المُسترجعة:** `{len(rows)}`")
+        st.markdown(
+            f"**المفتاح:** `{key_type}` | "
+            f"**workspace_id في الجلسة:** `{cur_wid_diag}` | "
+            f"**الطلبات المُسترجعة:** `{len(rows)}`")
         if fetch_error:
             st.error(f"❌ خطأ: `{fetch_error}`\n\n"
                      "شغّل في Supabase:\n"
@@ -2212,16 +2218,30 @@ def pg_design():
         else:
             ds_map = {}
             for r in rows:
-                ds = r.get("design_status") or "(null)"
+                ds = r.get("design_status") or "(null/فارغ)"
                 ds_map[ds] = ds_map.get(ds, 0) + 1
             st.write("design_status:", ds_map)
             wids = sorted({str(r.get("workspace_id","—")) for r in rows})
             st.write("workspace_ids في DB:", wids)
+            st.write(f"workspace_id الجلسة: `{cur_wid_diag}` (str: `{str(cur_wid_diag)}`)")
+            if str(cur_wid_diag) not in wids and cur_wid_diag:
+                st.error(f"⚠️ workspace_id الجلسة ({cur_wid_diag}) غير موجود في الطلبات! "
+                         f"الطلبات تحتوي: {wids}")
 
     if fetch_error:
         return
 
-    # ── Filter ──────────────────────────────────────────────────────────
+    # ── Workspace-aware filter — string-safe comparison ──────────────────
+    # Convert both sides to str to avoid int vs string mismatch from Supabase
+    cur_wid     = st.session_state.get("workspace_id", 0)
+    cur_wid_str = str(cur_wid) if cur_wid else ""
+
+    # Apply workspace filter only when a meaningful workspace_id exists
+    if cur_wid_str and cur_wid_str != "0":
+        rows = [r for r in rows
+                if str(r.get("workspace_id") or "").strip() == cur_wid_str]
+
+    # ── Design status filter ─────────────────────────────────────────────
     DESIGN_DONE = {"مكتمل","تم التصميم","designed","complete","completed"}
     ORDER_DONE  = {"تم التسليم","تم_التسليم","delivered","done"}
 
