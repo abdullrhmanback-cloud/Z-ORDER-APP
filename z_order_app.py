@@ -2019,94 +2019,98 @@ def pg_add_order():
 
     with st.form("new_order_v2", clear_on_submit=True):
 
-        # ── بيانات العميل ─────────────────────────────────────────────────
         st.markdown('<div class="sec">👤 بيانات العميل</div>', unsafe_allow_html=True)
         c1, c2 = st.columns(2)
         cust  = c1.text_input("اسم العميل *",     placeholder="مثال: أحمد محمد")
         phone = c2.text_input("رقم الهاتف",       placeholder="مثال: 07901234567")
 
-        # ── تفاصيل الطلب ──────────────────────────────────────────────────
         st.markdown('<div class="sec">🖨️ تفاصيل الطلب</div>', unsafe_allow_html=True)
         c3, c4 = st.columns(2)
         qty_txt  = c3.text_input("الكمية *",
-                                  placeholder="مثال: 500 كارت، 3 أمتار، 10 لفات")
+                                  placeholder="مثال: 500 كارت، 3 أمتار")
         size_txt = c4.text_input("القياس",
-                                  placeholder="مثال: A4، 50×70 سم، 90×50 مم")
+                                  placeholder="مثال: A4، 50×70 سم")
 
-        biz = st.text_input("النشاط التجاري",
-                             placeholder="مثال: مطعم، محل ملابس، شركة إنشاء")
-
+        biz  = st.text_input("النشاط التجاري",
+                              placeholder="مثال: مطعم، محل ملابس")
         desc = st.text_area("التفاصيل",
-                             placeholder="ألوان الطباعة، عدد الوجوه، نوع الورق، ملاحظات...",
+                             placeholder="ألوان الطباعة، عدد الوجوه، نوع الورق...",
                              height=100)
 
-        # ── التسعير والدفع (نصي حر) ────────────────────────────────────────
         st.markdown('<div class="sec">💰 التسعير والدفع (د.ع)</div>', unsafe_allow_html=True)
         c5, c6 = st.columns(2)
-        total_p_txt = c5.text_input(
-            "السعر الكلي (د.ع) *",
-            placeholder="مثال: 25,000 د.ع",
-            help="اكتب السعر بحرية مع رمز العملة إن أردت"
-        )
-        paid_txt = c6.text_input(
-            "المبلغ المدفوع (د.ع)",
-            placeholder="مثال: 10,000 د.ع",
-            help="المبلغ الذي دفعه العميل مقدماً"
-        )
+        total_p_txt = c5.text_input("السعر الكلي (د.ع) *",
+                                     placeholder="مثال: 25,000 د.ع")
+        paid_txt    = c6.text_input("المبلغ المدفوع (د.ع)",
+                                     placeholder="مثال: 10,000 د.ع")
 
-        # ── التاريخ ────────────────────────────────────────────────────────
         st.markdown('<div class="sec">📅 التاريخ</div>', unsafe_allow_html=True)
-        order_date = st.date_input(
-            "تاريخ الطلب",
-            value=datetime.date.today(),
-            help="تاريخ استلام الطلب — الافتراضي هو اليوم"
-        )
+        order_date = st.date_input("تاريخ الطلب", value=datetime.date.today())
 
         sub = st.form_submit_button("✅ حفظ الأوردر", use_container_width=True)
 
-    # ── معالجة الإرسال ─────────────────────────────────────────────────────
     if sub:
         errors = []
-        if not cust.strip():       errors.append("اسم العميل مطلوب.")
-        if not qty_txt.strip():    errors.append("الكمية مطلوبة.")
+        if not cust.strip():        errors.append("اسم العميل مطلوب.")
+        if not qty_txt.strip():     errors.append("الكمية مطلوبة.")
         if not total_p_txt.strip(): errors.append("السعر الكلي مطلوب.")
-
         if errors:
             for e in errors: st.error(e)
-        else:
-            ono = _order_no()
-            res = _post("orders", {
-                "workspace_id":    wid(),
-                "order_number":    ono,
-                "customer_name":   cust.strip(),
-                "customer_phone":  phone.strip(),
-                "quantity":        qty_txt.strip(),
-                "size":            size_txt.strip(),
-                "paper_type":      biz.strip(),
-                "description":     desc.strip(),
-                "total_price":     total_p_txt.strip(),   # نصي مع العملة
-                "paid":            paid_txt.strip(),       # نصي مع العملة
-                "remaining":       "",                     # يُحسب يدوياً أو يُترك فارغاً
-                "delivery_date":   str(order_date),
-                "created_by_id":   st.session_state["uid"],
-                "created_by_name": st.session_state["uname"],
-                "status":          "جديد",
-                "design_status":   "قيد الانتظار",
-                "production_status":"قيد الانتظار",
-                "delivered":       False,
-            })
+            return
 
-            if res:
+        # ── workspace_id: read from session (string-safe) ─────────────────
+        cur_wid = st.session_state.get("workspace_id", 0)
+        try:
+            ws_id = int(cur_wid) if cur_wid else 0
+        except (ValueError, TypeError):
+            ws_id = 0
+
+        ono = _order_no()
+
+        payload = {
+            "order_number":     ono,
+            "customer_name":    cust.strip(),
+            "customer_phone":   phone.strip(),
+            "quantity":         qty_txt.strip(),
+            "size":             size_txt.strip(),
+            "paper_type":       biz.strip(),
+            "description":      desc.strip(),
+            "total_price":      total_p_txt.strip(),
+            "paid":             paid_txt.strip(),
+            "remaining":        "",
+            "delivery_date":    str(order_date),
+            "created_by_id":    st.session_state.get("uid", 0),
+            "created_by_name":  st.session_state.get("uname", ""),
+            "status":           "جديد",
+            "design_status":    "قيد الانتظار",
+            "production_status":"قيد الانتظار",
+            "delivered":        False,
+        }
+        # Only add workspace_id if it exists (non-zero)
+        if ws_id:
+            payload["workspace_id"] = ws_id
+
+        # ── Raw POST with ACTIVE_KEY — same method as working login ────────
+        h = {
+            "apikey":        ACTIVE_KEY,
+            "Authorization": f"Bearer {ACTIVE_KEY}",
+            "Content-Type":  "application/json",
+            "Prefer":        "return=representation",
+        }
+        try:
+            resp = requests.post(f"{REST}/orders", headers=h,
+                                 json=payload, timeout=15)
+            if resp.status_code in (200, 201):
+                _get_cached.clear()
                 _push_notification(
-                    wid(),
+                    ws_id,
                     f"أوردر جديد: {ono}",
                     f"العميل: {cust.strip()} | الكمية: {qty_txt.strip()}",
                     target_roles=["design"],
-                    order_id=res.get("id"),
+                    order_id=None,
                 )
                 st.success(f"✅ تم حفظ الأوردر **{ono}** بنجاح!")
-
-                # ملخص الأوردر
+                # Show summary
                 st.markdown(
                     f'<div class="order-summary"><table>'
                     f'<tr><td>رقم الأوردر</td><td>{ono}</td></tr>'
@@ -2116,11 +2120,27 @@ def pg_add_order():
                     f'<tr><td>القياس</td><td>{size_txt.strip() or "—"}</td></tr>'
                     f'<tr><td>النشاط التجاري</td><td>{biz.strip() or "—"}</td></tr>'
                     f'<tr><td>التاريخ</td><td>{order_date}</td></tr>'
-                    f'<tr class="total-row"><td>السعر الكلي</td><td>{total_p_txt.strip()}</td></tr>'
+                    f'<tr class="total-row"><td>السعر الكلي</td>'
+                    f'<td>{total_p_txt.strip()}</td></tr>'
                     f'<tr><td>المدفوع</td><td>{paid_txt.strip() or "—"}</td></tr>'
                     f'</table></div>',
-                    unsafe_allow_html=True,
-                )
+                    unsafe_allow_html=True)
+            else:
+                # Show real Supabase error
+                try:
+                    err = resp.json()
+                    msg = err.get("message") or err.get("details") or resp.text[:300]
+                except Exception:
+                    msg = resp.text[:300]
+                st.error(
+                    f"❌ فشل حفظ الأوردر في Supabase.\n\n"
+                    f"**الخطأ:** `{msg}`\n\n"
+                    f"**HTTP Status:** `{resp.status_code}`\n\n"
+                    f"**تأكد من:** تشغيل `ALTER TABLE orders DISABLE ROW LEVEL SECURITY;`")
+        except requests.exceptions.Timeout:
+            st.error("❌ انتهت مهلة الاتصال. تحقق من الإنترنت.")
+        except Exception as ex:
+            st.error(f"❌ خطأ غير متوقع: `{ex}`")
 
 
 def pg_sales_preview():
