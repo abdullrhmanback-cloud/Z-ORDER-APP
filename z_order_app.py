@@ -1863,13 +1863,12 @@ def pg_team():
     except Exception:
         all_rows = []
 
-    # ── Client-side filter ────────────────────────────────────────────────
-    # Rule 1: never show superadmin row
-    # Rule 2: if this admin has a workspace_id, show only same-workspace users
-    #         OR users with no workspace_id (legacy accounts created before workspace logic)
-    # Rule 3: if no workspace_id in session (legacy admin), hide superadmin only
-    cur_wid = st.session_state.get("workspace_id", 0)
-    cur_uid = st.session_state.get("uid", 0)
+    # ── Resolve admin's workspace_id as integer ──────────────────────────
+    try:
+        cur_wid_int = int(cur_wid) if cur_wid else 0
+    except (ValueError, TypeError):
+        cur_wid_int = 0
+    cur_wid_str = str(cur_wid_int)
 
     def _should_show(u: dict) -> bool:
         # Always hide superadmin role
@@ -1878,14 +1877,17 @@ def pg_team():
         # Always hide the platform SA_EMAIL account
         if (u.get("email") or "").lower() == SA_EMAIL.lower():
             return False
-        # Workspace isolation — string-safe comparison
-        if cur_wid:
-            cur_s = str(cur_wid)
-            u_wid = u.get("workspace_id")
-            if u_wid is not None:
-                # If user has a workspace and it doesn't match ours — hide
-                if str(u_wid) not in ("0", "", cur_s):
-                    return False
+        # Workspace isolation — strict match when workspace is known
+        if cur_wid_int:
+            u_wid_raw = u.get("workspace_id")
+            try:
+                u_wid_int = int(u_wid_raw) if u_wid_raw is not None else 0
+            except (ValueError, TypeError):
+                u_wid_int = 0
+            # Hide users from OTHER workspaces
+            # Allow: same workspace, OR legacy users with workspace_id=0/None
+            if u_wid_int and u_wid_int != cur_wid_int:
+                return False
         return True
 
     rows = [u for u in all_rows if _should_show(u)]
@@ -2065,28 +2067,61 @@ def pg_add_order():
         except (ValueError, TypeError):
             ws_id = 0
 
+        # ── Helper: parse Arabic/currency text → float or None ────────────
+        def _parse_num(txt: str):
+            """
+            Converts user input like '25,000 د.ع' or '25000' to float.
+            Returns None (SQL NULL) if blank or unparseable — never ''.
+            """
+            if not txt or not txt.strip():
+                return None
+            # Remove currency symbols, spaces, commas
+            cleaned = (txt.strip()
+                       .replace("د.ع","").replace("د","").replace("ع","")
+                       .replace(",","").replace("،","").replace(" ","")
+                       .strip())
+            try:
+                return float(cleaned)
+            except (ValueError, TypeError):
+                return None   # non-numeric text → NULL, not error
+
+        total_price_val = _parse_num(total_p_txt)
+        paid_val        = _parse_num(paid_txt)
+        remaining_val   = (
+            round(total_price_val - paid_val, 2)
+            if total_price_val is not None and paid_val is not None
+            else None
+        )
+
         ono = _order_no()
 
         payload = {
-            "order_number":     ono,
-            "customer_name":    cust.strip(),
-            "customer_phone":   phone.strip(),
-            "quantity":         qty_txt.strip(),
-            "size":             size_txt.strip(),
-            "paper_type":       biz.strip(),
-            "description":      desc.strip(),
-            "total_price":      total_p_txt.strip(),
-            "paid":             paid_txt.strip(),
-            "remaining":        "",
-            "delivery_date":    str(order_date),
-            "created_by_id":    st.session_state.get("uid", 0),
-            "created_by_name":  st.session_state.get("uname", ""),
-            "status":           "جديد",
-            "design_status":    "قيد الانتظار",
-            "production_status":"قيد الانتظار",
-            "delivered":        False,
+            "order_number":      ono,
+            "customer_name":     cust.strip(),
+            "customer_phone":    phone.strip() or None,
+            # Text fields — kept as text (qty/size are TEXT columns)
+            "quantity":          qty_txt.strip() or None,
+            "size":              size_txt.strip() or None,
+            "paper_type":        biz.strip()  or None,
+            "description":       desc.strip() or None,
+            # Numeric fields — properly typed, never empty string
+            "total_price":       total_price_val,
+            "paid":              paid_val,
+            "remaining":         remaining_val,
+            "delivery_date":     str(order_date),
+            "created_by_id":     st.session_state.get("uid", 0),
+            "created_by_name":   st.session_state.get("uname", ""),
+            "status":            "جديد",
+            "design_status":     "قيد الانتظار",
+            "production_status": "قيد الانتظار",
+            "delivered":         False,
         }
-        # Only add workspace_id if it exists (non-zero)
+        # Remove None values that would cause issues with non-nullable columns
+        payload = {k: v for k, v in payload.items() if v is not None or k in
+                   ("total_price","paid","remaining","customer_phone",
+                    "quantity","size","paper_type","description")}
+
+        # Auto-assign workspace_id from session (integer)
         if ws_id:
             payload["workspace_id"] = ws_id
 
@@ -2251,23 +2286,34 @@ def pg_design():
     if fetch_error:
         return
 
-    # ── Workspace-aware filter — string-safe comparison ──────────────────
-    # Convert both sides to str to avoid int vs string mismatch from Supabase
-    cur_wid     = st.session_state.get("workspace_id", 0)
-    cur_wid_str = str(cur_wid) if cur_wid else ""
+    # ══ WORKSPACE FILTER — string-safe, matches session workspace_id ══════
+    cur_wid = st.session_state.get("workspace_id", 0)
+    try:
+        cur_wid_int = int(cur_wid) if cur_wid else 0
+    except (ValueError, TypeError):
+        cur_wid_int = 0
+    cur_wid_str = str(cur_wid_int)
 
-    # Apply workspace filter only when a meaningful workspace_id exists
-    if cur_wid_str and cur_wid_str != "0":
+    if cur_wid_int:
+        # Compare as strings to avoid int/string mismatch from Supabase
         rows = [r for r in rows
-                if str(r.get("workspace_id") or "").strip() == cur_wid_str]
+                if str(r.get("workspace_id") or "0").strip() == cur_wid_str]
 
-    # ── Design status filter ─────────────────────────────────────────────
-    DESIGN_DONE = {"مكتمل","تم التصميم","designed","complete","completed"}
-    ORDER_DONE  = {"تم التسليم","تم_التسليم","delivered","done"}
+    # ══ STATUS FILTER — orders that need design work ══════════════════════
+    # design_status values that mean "done" — exclude these
+    DESIGN_DONE = {
+        "مكتمل", "تم التصميم", "designed", "complete", "completed",
+        "جاهز للطباعة",  # also exclude if already pushed to production
+    }
+    # order statuses that mean fully finished — exclude these
+    ORDER_DONE = {
+        "تم التسليم", "تم_التسليم", "delivered", "done", "مكتمل",
+    }
 
     pend = [r for r in rows
             if (r.get("design_status") or "").strip() not in DESIGN_DONE
             and (r.get("status") or "").strip() not in ORDER_DONE]
+
     done = [r for r in rows
             if (r.get("design_status") or "").strip() in DESIGN_DONE]
 
