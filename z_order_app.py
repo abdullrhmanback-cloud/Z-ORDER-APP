@@ -1846,7 +1846,16 @@ def pg_team():
     guide("① أضف موظفاً جديداً بالاسم واليوزر وكلمة المرور والدور فقط<br>"
           "② يمكن تفعيل أو تعطيل أي حساب")
 
-    # ── Fetch users — then filter client-side ────────────────────────────
+    # ── Step 1: resolve workspace_id FIRST — before anything else ─────────
+    _raw_wid = st.session_state.get("workspace_id", 0)
+    try:
+        cur_wid_int = int(_raw_wid) if _raw_wid else 0
+    except (ValueError, TypeError):
+        cur_wid_int = 0
+    # Keep a plain copy for form insertion below
+    cur_wid = cur_wid_int
+
+    # ── Step 2: fetch users via raw GET (same pattern as login) ───────────
     h = {
         "apikey":        ACTIVE_KEY,
         "Authorization": f"Bearer {ACTIVE_KEY}",
@@ -1863,35 +1872,31 @@ def pg_team():
     except Exception:
         all_rows = []
 
-    # ── Resolve admin's workspace_id as integer ──────────────────────────
-    try:
-        cur_wid_int = int(cur_wid) if cur_wid else 0
-    except (ValueError, TypeError):
-        cur_wid_int = 0
-    cur_wid_str = str(cur_wid_int)
-
-    def _should_show(u: dict) -> bool:
+    # ── Step 3: filter — explicit parameter, no closure ───────────────────
+    def _should_show(u: dict, wid_int: int) -> bool:
+        """Returns True if this user should be visible to the current admin."""
         # Always hide superadmin role
         if u.get("role") == "superadmin":
             return False
-        # Always hide the platform SA_EMAIL account
+        # Always hide platform SA email even if stored in DB
         if (u.get("email") or "").lower() == SA_EMAIL.lower():
             return False
-        # Workspace isolation — strict match when workspace is known
-        if cur_wid_int:
-            u_wid_raw = u.get("workspace_id")
+        # Workspace isolation — only when admin has a known workspace
+        if wid_int:
+            u_raw = u.get("workspace_id")
             try:
-                u_wid_int = int(u_wid_raw) if u_wid_raw is not None else 0
+                u_wid = int(u_raw) if u_raw is not None else 0
             except (ValueError, TypeError):
-                u_wid_int = 0
-            # Hide users from OTHER workspaces
-            # Allow: same workspace, OR legacy users with workspace_id=0/None
-            if u_wid_int and u_wid_int != cur_wid_int:
+                u_wid = 0
+            # Hide users that belong to a DIFFERENT workspace
+            # Allow: same workspace OR legacy accounts (workspace_id = 0/None)
+            if u_wid and u_wid != wid_int:
                 return False
         return True
 
-    rows = [u for u in all_rows if _should_show(u)]
+    rows = [u for u in all_rows if _should_show(u, cur_wid_int)]
 
+    # ── Step 4: display table ─────────────────────────────────────────────
     if rows:
         safe_cols = [c for c in
                      ["id","full_name","username","email","role","is_active","created_at"]
@@ -1907,6 +1912,7 @@ def pg_team():
     else:
         st.info("لا يوجد موظفون بعد — أضف أول موظف من النموذج أدناه.")
 
+    # ── Step 5: add employee form ─────────────────────────────────────────
     st.markdown("---")
     st.markdown('<div class="sec">➕ إضافة موظف جديد</div>', unsafe_allow_html=True)
 
@@ -1937,7 +1943,6 @@ def pg_team():
             st.error(e)
 
         if not errs:
-            # Insert WITHOUT workspace_id — works for all existing DB schemas
             new_user = {
                 "full_name": fn.strip(),
                 "username":  un.strip().lower(),
@@ -1946,11 +1951,10 @@ def pg_team():
                 "role":      rl,
                 "is_active": True,
             }
-            # Add workspace_id only if current session has one (non-zero)
-            cur_wid = st.session_state.get("workspace_id", 0)
+            # Attach workspace_id from session if available
             if cur_wid:
-                new_user["workspace_id"]  = cur_wid
-                new_user["created_by"]    = st.session_state.get("uid", 0)
+                new_user["workspace_id"] = cur_wid
+                new_user["created_by"]   = st.session_state.get("uid", 0)
 
             res = _post("users", new_user)
             if _post_ok(res):
@@ -1960,6 +1964,7 @@ def pg_team():
                 err_msg = _post_err(res) if res else "لا استجابة من Supabase"
                 st.error(f"❌ فشل الإضافة: {err_msg}")
 
+    # ── Step 6: activate / deactivate ────────────────────────────────────
     st.markdown("---")
     st.markdown('<div class="sec">🔄 تفعيل / تعطيل حساب</div>', unsafe_allow_html=True)
     editable = [u for u in (rows or []) if u.get("role") not in ("superadmin",)]
