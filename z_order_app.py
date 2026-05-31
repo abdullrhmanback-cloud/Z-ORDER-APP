@@ -15,7 +15,7 @@
 
 # ── Imports ──────────────────────────────────────────────────────────────────
 import streamlit as st
-import hashlib, datetime, random, string, base64, requests, uuid, os
+import hashlib, datetime, random, string, base64, requests, uuid, os, json
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -2022,165 +2022,253 @@ def pg_sales_dash():
 
 
 def pg_add_order():
-    hdr("➕","أوردر جديد — Z-ORDER V2","أدخل تفاصيل الطلب يدوياً بحرية كاملة")
+    """
+    Multi-item order form with dynamic item list.
+    Global info: customer name, phone, address, price, delivery method.
+    Dynamic items: design-needed toggle, instructions, file upload per item.
+    Items packed as JSON in the `items` column of the orders table.
+    """
+    hdr("➕", "أوردر جديد", "أدخل تفاصيل الطلب والآيتمات")
 
-    with st.form("new_order_v2", clear_on_submit=True):
+    # ── session state: item count ─────────────────────────────────────────
+    if "order_item_count" not in st.session_state:
+        st.session_state["order_item_count"] = 1
 
-        st.markdown('<div class="sec">👤 بيانات العميل</div>', unsafe_allow_html=True)
-        c1, c2 = st.columns(2)
-        cust  = c1.text_input("اسم العميل *",     placeholder="مثال: أحمد محمد")
-        phone = c2.text_input("رقم الهاتف",       placeholder="مثال: 07901234567")
-
-        st.markdown('<div class="sec">🖨️ تفاصيل الطلب</div>', unsafe_allow_html=True)
-        c3, c4 = st.columns(2)
-        qty_txt  = c3.text_input("الكمية *",
-                                  placeholder="مثال: 500 كارت، 3 أمتار")
-        size_txt = c4.text_input("القياس",
-                                  placeholder="مثال: A4، 50×70 سم")
-
-        biz  = st.text_input("النشاط التجاري",
-                              placeholder="مثال: مطعم، محل ملابس")
-        desc = st.text_area("التفاصيل",
-                             placeholder="ألوان الطباعة، عدد الوجوه، نوع الورق...",
-                             height=100)
-
-        st.markdown('<div class="sec">💰 التسعير والدفع (د.ع)</div>', unsafe_allow_html=True)
-        c5, c6 = st.columns(2)
-        total_p_txt = c5.text_input("السعر الكلي (د.ع) *",
-                                     placeholder="مثال: 25,000 د.ع")
-        paid_txt    = c6.text_input("المبلغ المدفوع (د.ع)",
-                                     placeholder="مثال: 10,000 د.ع")
-
-        st.markdown('<div class="sec">📅 التاريخ</div>', unsafe_allow_html=True)
-        order_date = st.date_input("تاريخ الطلب", value=datetime.date.today())
-
-        sub = st.form_submit_button("✅ حفظ الأوردر", use_container_width=True)
-
-    if sub:
-        errors = []
-        if not cust.strip():        errors.append("اسم العميل مطلوب.")
-        if not qty_txt.strip():     errors.append("الكمية مطلوبة.")
-        if not total_p_txt.strip(): errors.append("السعر الكلي مطلوب.")
-        if errors:
-            for e in errors: st.error(e)
-            return
-
-        # ── workspace_id: read from session (string-safe) ─────────────────
-        cur_wid = st.session_state.get("workspace_id", 0)
+    # ── numeric parser ────────────────────────────────────────────────────
+    def _parse_num(txt: str):
+        if not txt or not txt.strip():
+            return None
+        cleaned = (txt.strip()
+                   .replace("د.ع","").replace("د","").replace("ع","")
+                   .replace(",","").replace("،","").replace(" ","").strip())
         try:
-            ws_id = int(cur_wid) if cur_wid else 0
+            return float(cleaned)
         except (ValueError, TypeError):
-            ws_id = 0
+            return None
 
-        # ── Helper: parse Arabic/currency text → float or None ────────────
-        def _parse_num(txt: str):
-            """
-            Converts user input like '25,000 د.ع' or '25000' to float.
-            Returns None (SQL NULL) if blank or unparseable — never ''.
-            """
-            if not txt or not txt.strip():
-                return None
-            # Remove currency symbols, spaces, commas
-            cleaned = (txt.strip()
-                       .replace("د.ع","").replace("د","").replace("ع","")
-                       .replace(",","").replace("،","").replace(" ","")
-                       .strip())
-            try:
-                return float(cleaned)
-            except (ValueError, TypeError):
-                return None   # non-numeric text → NULL, not error
+    # ══════════════════════════════════════════════════════════════════════
+    #  GLOBAL ORDER INFO
+    # ══════════════════════════════════════════════════════════════════════
+    st.markdown('<div class="sec">👤 بيانات العميل</div>', unsafe_allow_html=True)
+    g1, g2   = st.columns(2)
+    cust     = g1.text_input("اسم العميل *",  placeholder="مثال: أحمد محمد",   key="ord_cust")
+    phone    = g2.text_input("رقم الهاتف",    placeholder="مثال: 07901234567", key="ord_phone")
+    address  = st.text_input("العنوان",        placeholder="مثال: الكرادة، شارع 14", key="ord_addr")
 
-        total_price_val = _parse_num(total_p_txt)
-        paid_val        = _parse_num(paid_txt)
-        remaining_val   = (
-            round(total_price_val - paid_val, 2)
-            if total_price_val is not None and paid_val is not None
-            else None
-        )
+    st.markdown('<div class="sec">💰 التسعير وطريقة الاستلام</div>', unsafe_allow_html=True)
+    p1c, p2c, p3c = st.columns(3)
+    total_p_txt = p1c.text_input("السعر الكلي (د.ع) *",  placeholder="25,000 د.ع", key="ord_total")
+    paid_txt    = p2c.text_input("المبلغ المدفوع (د.ع)",  placeholder="10,000 د.ع", key="ord_paid")
+    delivery    = p3c.selectbox("طريقة الاستلام", ["في المكتب", "توصيل"],          key="ord_deliv")
+    order_date  = st.date_input("📅 تاريخ الطلب", value=datetime.date.today(),      key="ord_date")
 
-        ono = _order_no()
+    # ══════════════════════════════════════════════════════════════════════
+    #  DYNAMIC ITEMS
+    # ══════════════════════════════════════════════════════════════════════
+    st.markdown('<div class="sec">🖨️ آيتمات الطلب</div>', unsafe_allow_html=True)
+    st.caption("كل آيتم هو منتج طباعة مستقل داخل نفس الأوردر.")
 
-        payload = {
-            "order_number":      ono,
-            "customer_name":     cust.strip(),
-            "customer_phone":    phone.strip() or None,
-            # Text fields — kept as text (qty/size are TEXT columns)
-            "quantity":          qty_txt.strip() or None,
-            "size":              size_txt.strip() or None,
-            "paper_type":        biz.strip()  or None,
-            "description":       desc.strip() or None,
-            # Numeric fields — properly typed, never empty string
-            "total_price":       total_price_val,
-            "paid":              paid_val,
-            "remaining":         remaining_val,
-            "delivery_date":     str(order_date),
-            "created_by_id":     st.session_state.get("uid", 0),
-            "created_by_name":   st.session_state.get("uname", ""),
-            "status":            "جديد",
-            "design_status":     "قيد الانتظار",
-            "production_status": "قيد الانتظار",
-            "delivered":         False,
-        }
-        # Remove None values that would cause issues with non-nullable columns
-        payload = {k: v for k, v in payload.items() if v is not None or k in
-                   ("total_price","paid","remaining","customer_phone",
-                    "quantity","size","paper_type","description")}
+    n_items = st.session_state["order_item_count"]
 
-        # Auto-assign workspace_id from session (integer)
-        if ws_id:
-            payload["workspace_id"] = ws_id
+    for i in range(n_items):
+        st.markdown(
+            f'<div style="background:var(--bg2);border:1px solid var(--bdr2);'
+            f'border-radius:var(--r2);padding:.85rem 1rem;margin-bottom:.65rem;">'
+            f'<b>📦 آيتم {i + 1}</b></div>',
+            unsafe_allow_html=True)
 
-        # ── Raw POST with ACTIVE_KEY — same method as working login ────────
-        h = {
-            "apikey":        ACTIVE_KEY,
-            "Authorization": f"Bearer {ACTIVE_KEY}",
-            "Content-Type":  "application/json",
-            "Prefer":        "return=representation",
-        }
-        try:
-            resp = requests.post(f"{REST}/orders", headers=h,
+        ia1, ia2 = st.columns(2)
+        ia1.text_input("الكمية *",      placeholder="مثال: 500 كارت",   key=f"item_qty_{i}")
+        ia2.text_input("القياس",        placeholder="مثال: A4، 9×5 سم", key=f"item_size_{i}")
+        ia3, ia4 = st.columns(2)
+        ia3.text_input("النوع / النشاط", placeholder="مثال: كارت شخصي، بنر", key=f"item_type_{i}")
+        ia4.text_input("ملاحظة إضافية", placeholder="ألوان، وجهان، لمعة...",  key=f"item_note_{i}")
+
+        needs_design = st.checkbox("✏️ يحتاج تصميم؟", key=f"item_needs_design_{i}", value=True)
+
+        if needs_design:
+            st.text_area("معلومات التصميم (نصوص، ألوان، مطلوبات...)",
+                         placeholder="اسم الشركة، الشعار، رقم الهاتف، اللون الأساسي...",
+                         key=f"item_design_inst_{i}", height=80)
+            st.file_uploader("📎 صورة تقريبية أو مرجعية (اختياري)",
+                             key=f"item_ref_img_{i}",
+                             type=["jpg","jpeg","png","webp","pdf"],
+                             help="صورة مرجع للمصمم")
+        else:
+            st.markdown('<div style="font-size:.8rem;color:var(--t2);margin-bottom:.25rem">📁 الملف أو الصورة الجاهزة للطبع</div>', unsafe_allow_html=True)
+            st.file_uploader("الملف الجاهز للطبع", label_visibility="collapsed",
+                             key=f"item_ready_file_{i}",
+                             type=["jpg","jpeg","png","webp","pdf","ai","psd","svg","eps","cdr","zip"])
+
+        st.markdown("<hr style='margin:.5rem 0'>", unsafe_allow_html=True)
+
+    # ── Add / remove item buttons ─────────────────────────────────────────
+    col_add, col_rem, _ = st.columns([1, 1, 4])
+    if col_add.button("➕ إضافة آيتم آخر", key="btn_add_item"):
+        st.session_state["order_item_count"] += 1
+        st.rerun()
+    if n_items > 1 and col_rem.button("➖ حذف آخر آيتم", key="btn_rem_item"):
+        st.session_state["order_item_count"] -= 1
+        st.rerun()
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # ══════════════════════════════════════════════════════════════════════
+    #  SUBMIT
+    # ══════════════════════════════════════════════════════════════════════
+    submit = st.button("🚀 رفع الأوردر", key="btn_submit_order", use_container_width=True)
+
+    if not submit:
+        return
+
+    # ── Validate ──────────────────────────────────────────────────────────
+    errs = []
+    if not cust.strip():        errs.append("اسم العميل مطلوب.")
+    if not total_p_txt.strip(): errs.append("السعر الكلي مطلوب.")
+    for i in range(n_items):
+        if not str(st.session_state.get(f"item_qty_{i}", "") or "").strip():
+            errs.append(f"الكمية مطلوبة في الآيتم {i + 1}.")
+    if errs:
+        for e in errs: st.error(e)
+        return
+
+    # ── Workspace ID ──────────────────────────────────────────────────────
+    try:
+        ws_id = int(st.session_state.get("workspace_id", 0) or 0)
+    except (ValueError, TypeError):
+        ws_id = 0
+
+    # ── Build items list — upload files ───────────────────────────────────
+    items_list = []
+    for i in range(n_items):
+        needs_des = st.session_state.get(f"item_needs_design_{i}", True)
+        qty_v     = str(st.session_state.get(f"item_qty_{i}",  "") or "").strip()
+        size_v    = str(st.session_state.get(f"item_size_{i}", "") or "").strip()
+        type_v    = str(st.session_state.get(f"item_type_{i}", "") or "").strip()
+        note_v    = str(st.session_state.get(f"item_note_{i}", "") or "").strip()
+        des_inst  = str(st.session_state.get(f"item_design_inst_{i}", "") or "").strip()
+        uploaded_url = ""
+
+        if needs_des:
+            ref_f = st.session_state.get(f"item_ref_img_{i}")
+            if ref_f is not None:
+                with st.spinner(f"⬆️ رفع صورة مرجعية للآيتم {i + 1}..."):
+                    u_url, _ = _upload(ref_f.read(), ref_f.name,
+                                       ref_f.type or "image/jpeg",
+                                       subfolder="references")
+                uploaded_url = u_url
+        else:
+            ready_f = st.session_state.get(f"item_ready_file_{i}")
+            if ready_f is not None:
+                with st.spinner(f"⬆️ رفع ملف الآيتم {i + 1}..."):
+                    u_url, _ = _upload(ready_f.read(), ready_f.name,
+                                       ready_f.type or "application/octet-stream",
+                                       subfolder="designs")
+                uploaded_url = u_url
+
+        items_list.append({
+            "index":                i + 1,
+            "quantity":             qty_v,
+            "size":                 size_v,
+            "type":                 type_v,
+            "notes":                note_v,
+            "needs_design":         needs_des,
+            "design_instructions":  des_inst if needs_des else "",
+            "file_url":             uploaded_url,
+        })
+
+    # ── Parse numeric fields ──────────────────────────────────────────────
+    total_price_val = _parse_num(total_p_txt)
+    paid_val        = _parse_num(paid_txt)
+    remaining_val   = (
+        round(total_price_val - paid_val, 2)
+        if total_price_val is not None and paid_val is not None
+        else None
+    )
+
+    # ── Items summary for quick display ───────────────────────────────────
+    summary_parts = []
+    for it in items_list:
+        line = f"آيتم {it['index']}: {it['quantity']} {it['type']} {it['size']}".strip()
+        if it.get("notes"): line += f" ({it['notes']})"
+        summary_parts.append(line)
+    summary_desc = " | ".join(summary_parts)
+
+    # ── Build DB payload ──────────────────────────────────────────────────
+    ono = _order_no()
+    payload = {
+        "order_number":      ono,
+        "customer_name":     cust.strip(),
+        "customer_phone":    phone.strip() or None,
+        "description":       address.strip() or None,
+        "paper_type":        delivery,
+        "quantity":          summary_desc or None,
+        "size":              f"{n_items} آيتم",
+        "total_price":       total_price_val,
+        "paid":              paid_val,
+        "remaining":         remaining_val,
+        "delivery_date":     str(order_date),
+        "created_by_id":     st.session_state.get("uid", 0),
+        "created_by_name":   st.session_state.get("uname", ""),
+        "status":            "جديد",
+        "design_status":     "قيد الانتظار",
+        "production_status": "قيد الانتظار",
+        "delivered":         False,
+        "items":             json.dumps(items_list, ensure_ascii=False),
+    }
+    payload = {k: v for k, v in payload.items()
+               if v is not None or k in
+               ("total_price","paid","remaining","customer_phone",
+                "quantity","size","paper_type","description","items")}
+    if ws_id:
+        payload["workspace_id"] = ws_id
+
+    # ── POST to Supabase ──────────────────────────────────────────────────
+    h_post = {
+        "apikey":        ACTIVE_KEY,
+        "Authorization": f"Bearer {ACTIVE_KEY}",
+        "Content-Type":  "application/json",
+        "Prefer":        "return=representation",
+    }
+    try:
+        with st.spinner("💾 جاري حفظ الأوردر..."):
+            resp = requests.post(f"{REST}/orders", headers=h_post,
                                  json=payload, timeout=15)
-            if resp.status_code in (200, 201):
-                _get_cached.clear()
-                _push_notification(
-                    ws_id,
-                    f"أوردر جديد: {ono}",
-                    f"العميل: {cust.strip()} | الكمية: {qty_txt.strip()}",
-                    target_roles=["design"],
-                    order_id=None,
-                )
-                st.success(f"✅ تم حفظ الأوردر **{ono}** بنجاح!")
-                # Show summary
-                st.markdown(
-                    f'<div class="order-summary"><table>'
-                    f'<tr><td>رقم الأوردر</td><td>{ono}</td></tr>'
-                    f'<tr><td>العميل</td><td>{cust.strip()}</td></tr>'
-                    f'<tr><td>الهاتف</td><td>{phone.strip() or "—"}</td></tr>'
-                    f'<tr><td>الكمية</td><td>{qty_txt.strip()}</td></tr>'
-                    f'<tr><td>القياس</td><td>{size_txt.strip() or "—"}</td></tr>'
-                    f'<tr><td>النشاط التجاري</td><td>{biz.strip() or "—"}</td></tr>'
-                    f'<tr><td>التاريخ</td><td>{order_date}</td></tr>'
-                    f'<tr class="total-row"><td>السعر الكلي</td>'
-                    f'<td>{total_p_txt.strip()}</td></tr>'
-                    f'<tr><td>المدفوع</td><td>{paid_txt.strip() or "—"}</td></tr>'
-                    f'</table></div>',
-                    unsafe_allow_html=True)
-            else:
-                # Show real Supabase error
-                try:
-                    err = resp.json()
-                    msg = err.get("message") or err.get("details") or resp.text[:300]
-                except Exception:
-                    msg = resp.text[:300]
-                st.error(
-                    f"❌ فشل حفظ الأوردر في Supabase.\n\n"
-                    f"**الخطأ:** `{msg}`\n\n"
-                    f"**HTTP Status:** `{resp.status_code}`\n\n"
-                    f"**تأكد من:** تشغيل `ALTER TABLE orders DISABLE ROW LEVEL SECURITY;`")
-        except requests.exceptions.Timeout:
-            st.error("❌ انتهت مهلة الاتصال. تحقق من الإنترنت.")
-        except Exception as ex:
-            st.error(f"❌ خطأ غير متوقع: `{ex}`")
+        if resp.status_code in (200, 201):
+            _get_cached.clear()
+            _push_notification(
+                ws_id,
+                f"أوردر جديد: {ono}",
+                f"العميل: {cust.strip()} | {n_items} آيتم",
+                target_roles=["design"],
+                order_id=None,
+            )
+            st.success(f"✅ تم رفع الأوردر **{ono}** بنجاح! ({n_items} آيتم)")
+            st.markdown(
+                f'<div class="order-summary"><table>'
+                f'<tr><td>رقم الأوردر</td><td><b>{ono}</b></td></tr>'
+                f'<tr><td>العميل</td><td>{cust.strip()}</td></tr>'
+                f'<tr><td>الهاتف</td><td>{phone.strip() or "—"}</td></tr>'
+                f'<tr><td>العنوان</td><td>{address.strip() or "—"}</td></tr>'
+                f'<tr><td>طريقة الاستلام</td><td>{delivery}</td></tr>'
+                f'<tr><td>عدد الآيتمات</td><td>{n_items}</td></tr>'
+                f'<tr class="total-row"><td>السعر الكلي</td><td>{total_p_txt.strip()}</td></tr>'
+                f'<tr><td>المدفوع</td><td>{paid_txt.strip() or "—"}</td></tr>'
+                f'</table></div>',
+                unsafe_allow_html=True)
+            # Reset item count
+            st.session_state["order_item_count"] = 1
+        else:
+            try:
+                err = resp.json()
+                msg = err.get("message") or err.get("details") or resp.text[:300]
+            except Exception:
+                msg = resp.text[:300]
+            st.error(f"❌ فشل حفظ الأوردر.\n\n**الخطأ:** `{msg}`\n\n**HTTP:** `{resp.status_code}`")
+    except requests.exceptions.Timeout:
+        st.error("❌ انتهت مهلة الاتصال.")
+    except Exception as ex:
+        st.error(f"❌ خطأ: `{ex}`")
 
 
 def pg_sales_preview():
