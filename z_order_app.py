@@ -2428,30 +2428,109 @@ def pg_design():
             st.markdown("")
 
         for r in pend:
-            oid     = r.get("id","")
-            onum    = r.get("order_number","—")
-            cname   = r.get("customer_name","—")
-            ostatus = r.get("status","—")
+            oid     = r.get("id", "")
+            onum    = r.get("order_number", "—")
+            cname   = r.get("customer_name", "—")
+            ostatus = r.get("status", "—")
             ds      = (r.get("design_status") or "").strip()
             icon    = "🆕" if not ds or ds == "قيد الانتظار" else "🔵"
 
+            # ── Parse items JSON (new multi-item orders) ─────────────────
+            items_json = r.get("items") or "[]"
+            try:
+                items_list = json.loads(items_json) if isinstance(items_json, str) else (items_json or [])
+            except (ValueError, TypeError):
+                items_list = []
+
             with st.expander(f"{icon}  {onum}  ←  {cname}  [{ostatus}]"):
+
+                # ── ORDER HEADER — clean metadata only ───────────────────
                 st.subheader(f"📋 {onum}")
-                c1, c2 = st.columns(2)
-                c1.markdown(f"**👤 العميل:**  {cname}")
-                c1.markdown(f"**📦 الكمية:**  {r.get('quantity','—')}")
-                c1.markdown(f"**📐 القياس:**  {r.get('size','—')}")
-                c1.markdown(f"**🏪 النشاط:** {r.get('paper_type','—')}")
-                c2.markdown(f"**📅 التاريخ:** {str(r.get('created_at','—'))[:16]}")
-                c2.markdown(f"**👨 أضافه:**  {r.get('created_by_name','—')}")
-                c2.markdown(f"**📊 الحالة:**  {ostatus}")
-                c2.markdown(f"**📞 الهاتف:**  {r.get('customer_phone','—')}")
-                if r.get("description"):
-                    st.info(f"📝 {r['description']}")
+                h1, h2 = st.columns(2)
+                h1.markdown(f"**👤 العميل:**  {cname}")
+                h1.markdown(f"**📞 الهاتف:**  {r.get('customer_phone', '—')}")
+                h1.markdown(f"**📍 العنوان:** {r.get('description', '—')}")
+                h2.markdown(f"**📅 التاريخ:** {str(r.get('created_at', '—'))[:16]}")
+                h2.markdown(f"**👨 أضافه:**  {r.get('created_by_name', '—')}")
+                h2.markdown(f"**🚗 الاستلام:** {r.get('paper_type', '—')}")
+                h2.markdown(f"**💰 السعر:**   {r.get('total_price', '—')} | دُفع: {r.get('paid', '—')}")
+
                 st.markdown("---")
 
-                upld = st.file_uploader(
-                    "⬆️ اختر ملف التصميم (PDF, PNG, AI, PSD…)",
+                # ── ITEMS LIST ────────────────────────────────────────────
+                if items_list:
+                    st.markdown(f"**📦 الآيتمات ({len(items_list)}):**")
+                    for it in items_list:
+                        idx        = it.get("index", "?")
+                        it_qty     = it.get("quantity", "—")
+                        it_size    = it.get("size", "—")
+                        it_type    = it.get("type", "—")
+                        it_notes   = it.get("notes", "")
+                        it_needs   = it.get("needs_design", True)
+                        it_inst    = it.get("design_instructions", "")
+                        it_fileurl = it.get("file_url", "")
+
+                        status_badge = (
+                            '<span style="background:rgba(168,85,247,.15);color:#c084fc;'
+                            'border-radius:999px;padding:.1rem .45rem;font-size:.65rem;">✏️ تحتاج تصميم</span>'
+                            if it_needs else
+                            '<span style="background:rgba(34,197,94,.12);color:#4ade80;'
+                            'border-radius:999px;padding:.1rem .45rem;font-size:.65rem;">📁 ملف جاهز</span>'
+                        )
+                        st.markdown(
+                            f'<div style="background:var(--bg3);border:1px solid var(--bdr2);'
+                            f'border-radius:var(--r);padding:.6rem .85rem;margin-bottom:.4rem;">'
+                            f'<b>آيتم {idx}</b> &nbsp;{status_badge}<br>'
+                            f'<span style="font-size:.82rem;color:var(--t2)">'
+                            f'🖨️ {it_type or "—"} &nbsp;|&nbsp; 📦 {it_qty} &nbsp;|&nbsp; 📐 {it_size}'
+                            f'{"&nbsp;|&nbsp; 📝 " + it_notes if it_notes else ""}'
+                            f'</span></div>',
+                            unsafe_allow_html=True)
+
+                        # Show design instructions for items needing design
+                        if it_needs and it_inst:
+                            st.markdown(
+                                f'<div style="background:rgba(168,85,247,.07);border-right:3px solid #a855f7;'
+                                f'border-radius:var(--r);padding:.5rem .75rem;margin:.25rem 0 .5rem;">'
+                                f'<b style="font-size:.72rem;color:#a855f7;">معلومات التصميم:</b><br>'
+                                f'<span style="font-size:.83rem">{it_inst}</span></div>',
+                                unsafe_allow_html=True)
+
+                        # Show reference/ready file for this item
+                        if it_fileurl:
+                            label = "📎 ملف مرجعي للتصميم" if it_needs else "📁 الملف الجاهز للطبع"
+                            ext   = it_fileurl.split(".")[-1].lower()
+                            # Download button with unique key
+                            _dl_btn(it_fileurl, f"⬇️ {label} — آيتم {idx}")
+                            # Preview if image
+                            if ext in ("png","jpg","jpeg","webp"):
+                                try:
+                                    rr = requests.get(it_fileurl, timeout=10)
+                                    if rr.status_code == 200:
+                                        st.image(rr.content, caption=f"آيتم {idx}",
+                                                 use_container_width=True)
+                                except Exception:
+                                    pass
+                        else:
+                            if it_needs:
+                                st.caption(f"آيتم {idx}: لا يوجد ملف مرجعي — التصميم من الصفر.")
+                else:
+                    # ── Legacy single-item order (no items JSON) ───────────
+                    old_qty  = r.get("quantity", "—")
+                    old_size = r.get("size", "—")
+                    st.markdown(
+                        f'<div style="background:var(--bg3);border:1px solid var(--bdr2);'
+                        f'border-radius:var(--r);padding:.6rem .85rem;">'
+                        f'📦 {old_qty} &nbsp;|&nbsp; 📐 {old_size}'
+                        f'</div>',
+                        unsafe_allow_html=True)
+
+                st.markdown("---")
+
+                # ── DESIGN UPLOAD (global for whole order) ────────────────
+                st.markdown("**⬆️ رفع ملف التصميم النهائي (يشمل الأوردر كاملاً)**")
+                upld  = st.file_uploader(
+                    "اختر ملف التصميم النهائي",
                     key=f"du_{oid}",
                     type=["pdf","png","jpg","jpeg","ai","psd","svg","eps","zip","cdr","webp"])
                 dl    = st.text_input("🔗 أو رابط التصميم",
@@ -2463,7 +2542,7 @@ def pg_design():
                 if st.button("✅ تأكيد رفع التصميم وإرساله للإنتاج",
                              key=f"dok_{oid}", use_container_width=True):
                     file_url   = ""
-                    store_path = (r.get("design_storage_path") or "")
+                    store_path = ""
                     if upld:
                         with st.spinner("⬆️ جاري رفع الملف…"):
                             file_url, store_path = _upload(
@@ -2473,15 +2552,14 @@ def pg_design():
                         if not file_url:
                             st.error("❌ فشل رفع الملف."); st.stop()
                     else:
-                        file_url  = (r.get("design_file_url") or "")
-                        store_path = ""
+                        file_url = (r.get("design_file_url") or "")
                     link = dl.strip() or (r.get("design_link") or "")
                     if not file_url and not link:
                         st.error("⚠️ يجب رفع ملف أو إدخال رابط التصميم.")
                     else:
                         ok = _patch("orders", {"id": oid}, {
                             "design_status":   "مكتمل",
-                            "design_file_url": file_url or link,  # single column
+                            "design_file_url": file_url or link,
                             "design_link":     link,
                             "design_notes":    notes.strip(),
                             "design_updated":  _ts(),
